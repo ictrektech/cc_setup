@@ -187,7 +187,7 @@ CLAUDE_BIN=claude-haha python3 -m digital_worker.runner full \
 
 ## Agent Room Web 控制台
 
-仓库里提供了一个本地 Web 控制台，可启动和管理当前机器上的 Claude agent 会话。它兼容 cc-switch 方案和 cc-haha 方案，会优先使用 `claude` 命令，找不到时回退到 `claude-haha`。
+仓库里提供了一个本地 Web 控制台，可启动和管理当前机器上的 Claude agent 会话。Web app 只使用 `claude` 命令。
 
 ```bash
 cd web
@@ -213,4 +213,4 @@ http://<远端 IP>:3766
 - `cc_setup_win.ps1`: Windows PowerShell 安装 Claude 环境、RTK，并写入对应命令。
 - `dworkers_setup.sh`: 克隆/更新 `ictrektech/digital-workers`，重装 skills，生成 `.env` 和示例任务。
 - `digital_workers_setup.sh`: 兼容入口，本地执行时转到 `dworkers_setup.sh`，远程执行时拉取 `dworkers_setup.sh`。
-- `web/`: Agent Room Web 控制台，兼容 `claude` 和 `claude-haha`，提供项目目录选择、会话启动、实时终端输出和多会话切换。
+- `web/`: Agent Room Web 控制台，使用 `claude` 命令，提供项目目录选择、会话启动、实时终端输出和多会话切换。

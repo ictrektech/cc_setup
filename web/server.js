@@ -16,10 +16,8 @@ const sessions = new Map();
 
 const PORT = Number(process.env.PORT || 3766);
 const DEFAULT_COMMANDS = [
-  process.env.CLAUDE_HAHA_BIN,
   process.env.CLAUDE_BIN,
-  "claude",
-  "claude-haha"
+  "claude"
 ].filter(Boolean);
 
 app.use(express.json({ limit: "1mb" }));
@@ -94,7 +92,7 @@ app.post("/api/sessions", (req, res) => {
   const command = resolveCommand();
   if (!command) {
     res.status(400).json({
-      error: "未找到 claude 或 claude-haha。可用 CLAUDE_BIN=/path/to/claude 或 CLAUDE_HAHA_BIN=/path/to/claude-haha npm run dev 指定。"
+      error: "未找到 claude。可用 CLAUDE_BIN=/path/to/claude npm run dev 指定。"
     });
     return;
   }

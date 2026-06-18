@@ -1,16 +1,39 @@
 :root {
   color-scheme: dark;
-  --bg: #0b0d10;
-  --rail: #14171c;
-  --panel: #191d24;
-  --panel-2: #222832;
-  --line: #313844;
-  --text: #f4f6f8;
-  --muted: #9aa4b2;
-  --accent: #59d37d;
+  --bg: #151a21;
+  --rail: #1d232c;
+  --panel: #232a35;
+  --panel-2: #2b3441;
+  --line: #3b4655;
+  --text: #f6f8fb;
+  --muted: #b2bbc8;
+  --accent: #65d987;
   --blue: #62a8ff;
   --warn: #f6bf53;
   --danger: #ff6875;
+  --green-soft: #193424;
+  --ink: #10151b;
+  --field: #151b22;
+  --shadow: rgba(0, 0, 0, 0.24);
+}
+
+:root[data-theme="light"] {
+  color-scheme: light;
+  --bg: #eef2f6;
+  --rail: #f8fafc;
+  --panel: #ffffff;
+  --panel-2: #f0f4f8;
+  --line: #d5dde7;
+  --text: #17202b;
+  --muted: #667384;
+  --accent: #24a35a;
+  --blue: #2f7de1;
+  --warn: #b7791f;
+  --danger: #e54b5d;
+  --green-soft: #e9f8ee;
+  --ink: #f7fafc;
+  --field: #ffffff;
+  --shadow: rgba(26, 41, 61, 0.08);
 }
 
 * {
@@ -82,6 +105,7 @@ dt,
   border: 1px solid var(--line);
   border-radius: 8px;
   background: var(--panel);
+  box-shadow: 0 10px 30px var(--shadow);
 }
 
 .panel {
@@ -121,7 +145,7 @@ textarea {
   width: 100%;
   border: 1px solid var(--line);
   border-radius: 6px;
-  background: #0d1015;
+  background: var(--field);
   color: var(--text);
   padding: 10px 11px;
   outline: none;
@@ -190,7 +214,13 @@ button:disabled {
   gap: 20px;
   padding: 20px 24px;
   border-bottom: 1px solid var(--line);
-  background: #101319;
+  background: var(--bg);
+}
+
+.top-actions {
+  display: flex;
+  align-items: center;
+  gap: 12px;
 }
 
 .eyebrow {
@@ -255,7 +285,7 @@ h1 {
 
 .room-card.active {
   border-color: var(--accent);
-  background: #142019;
+  background: var(--green-soft);
 }
 
 .room-card.empty {
@@ -328,17 +358,100 @@ h1 {
   display: block;
 }
 
+.stream,
 #terminal {
   margin: 0;
   min-height: 390px;
   height: 100%;
   padding: 14px;
   overflow: auto;
-  background: #07090c;
+  background: var(--ink);
+}
+
+.stream {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.bubble {
+  max-width: 860px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  padding: 11px 12px;
+  background: var(--panel);
+  box-shadow: 0 8px 24px var(--shadow);
+}
+
+.bubble.user {
+  align-self: flex-end;
+  background: var(--green-soft);
+  border-color: var(--accent);
+}
+
+.bubble.assistant {
+  align-self: flex-start;
+  background: var(--panel);
+}
+
+.bubble.system {
+  max-width: 100%;
+  background: var(--panel-2);
+  border-style: dashed;
+  color: var(--muted);
+}
+
+.bubble-label {
+  margin-bottom: 5px;
+  color: var(--accent);
+  font-size: 12px;
+  font-weight: 800;
+}
+
+.bubble.system .bubble-label {
+  color: var(--warn);
+}
+
+.bubble-body {
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+
+.typing {
+  margin-left: 8px;
+  color: var(--muted);
+  font-weight: 600;
+}
+
+#runStatus {
+  display: inline-flex;
+  width: fit-content;
+  margin-top: 6px;
+  padding: 3px 8px;
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  color: var(--accent);
+  font-size: 12px;
+  font-style: normal;
+  background: var(--panel-2);
+}
+
+#terminal {
   color: #dce7dd;
   white-space: pre-wrap;
   word-break: break-word;
   font: 13px/1.5 Menlo, Monaco, Consolas, "Courier New", monospace;
+}
+
+.stream:focus,
+#terminal:focus {
+  outline: 2px solid var(--accent);
+  outline-offset: -2px;
+}
+
+.actions .active {
+  border-color: var(--accent);
+  color: var(--accent);
 }
 
 .inspector {

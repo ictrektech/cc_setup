@@ -1,6 +1,6 @@
 # Agent Room
 
-一个本地 Web 控制台，用来启动和管理当前机器上的 Claude agent 会话。它兼容 cc-switch 方案和 cc-haha 方案，默认优先使用 `claude`，找不到时回退到 `claude-haha`。
+一个本地 Web 控制台，用来启动和管理当前机器上的 Claude agent 会话。Web app 只使用 `claude` 命令。
 
 ## 启动
 
@@ -19,8 +19,6 @@ http://localhost:3766
 
 ```bash
 CLAUDE_BIN=/Users/you/.local/bin/claude bash dev.sh
-# 或
-CLAUDE_HAHA_BIN=/Users/you/cc-haha/bin/claude-haha bash dev.sh
 ```
 
 ## 当前功能

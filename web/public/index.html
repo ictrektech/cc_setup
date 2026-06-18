@@ -30,7 +30,7 @@
             任务指令
             <textarea id="prompt" name="prompt" rows="5" placeholder="描述你希望 Claude 做什么"></textarea>
           </label>
-          <button type="submit">启动 agent</button>
+          <button id="launchBtn" type="submit">启动 agent</button>
         </form>
       </section>
 
@@ -53,10 +53,13 @@
           <p class="eyebrow">ROOM OVERVIEW</p>
           <h1>Agent 工作间</h1>
         </div>
-        <div class="stats">
-          <div><span id="runningCount">0</span><b>运行中</b></div>
-          <div><span id="doneCount">0</span><b>已结束</b></div>
-          <div><span id="totalCount">0</span><b>会话</b></div>
+        <div class="top-actions">
+          <button id="themeBtn" class="ghost" type="button">浅色</button>
+          <div class="stats">
+            <div><span id="runningCount">0</span><b>运行中</b></div>
+            <div><span id="doneCount">0</span><b>已结束</b></div>
+            <div><span id="totalCount">0</span><b>会话</b></div>
+          </div>
         </div>
       </header>
 
@@ -68,13 +71,17 @@
             <div>
               <strong id="activeTitle">还没有会话</strong>
               <span id="activeMeta">选择项目目录，启动一个 Claude agent</span>
+              <em id="runStatus">空闲</em>
             </div>
             <div class="actions">
+              <button id="chatTab" class="ghost active" type="button">对话</button>
+              <button id="rawTab" class="ghost" type="button">Raw</button>
               <button id="clearBtn" class="ghost" type="button" disabled>清屏</button>
               <button id="stopBtn" class="danger" type="button" disabled>停止</button>
             </div>
           </div>
-          <pre id="terminal" aria-label="agent 输出"></pre>
+          <section id="stream" class="stream" aria-label="agent 对话" tabindex="0"></section>
+          <pre id="terminal" aria-label="agent 原始输出" tabindex="0" hidden></pre>
         </div>
 
         <aside class="inspector">
