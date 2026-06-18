@@ -189,6 +189,8 @@ CLAUDE_BIN=claude-haha python3 -m digital_worker.runner full \
 
 仓库里提供了一个本地 Web 控制台，可启动和管理当前机器上的 Claude agent 会话。Web app 只使用 `claude` 命令。
 
+![Agent Room Web 控制台](docs/images/agent-room.jpg)
+
 ```bash
 cd web
 bash dev.sh
@@ -205,6 +207,22 @@ http://localhost:3766
 ```text
 http://<远端 IP>:3766
 ```
+
+常用环境变量：
+
+```bash
+CLAUDE_BIN=/data/jhu/dev/bin/claude PORT=3766 bash dev.sh
+```
+
+当前功能：
+
+- 以项目目录为单位创建 Agent Room，并在顶部显示运行中、已结束和总会话数。
+- 使用 `claude -p --verbose --output-format stream-json --include-partial-messages` 运行任务，主对话窗口按 Claude 的真实 `content_block_delta` 流式输出。
+- 主窗口显示结构化的 `System / You / Claude` 对话气泡，避免 Claude TUI spinner、控制字符和 JSON 流污染回答。
+- 提供 Raw 视图查看原始输出，方便排查 Claude CLI 或 JSON stream 问题。
+- 发送任务时显示运行状态，例如等待首字、正在生成、完成。
+- 支持浅色/深色主题切换，主题偏好保存在浏览器本地。
+- 同一工作目录已有 running 房间时，再次启动会切换到已有房间，避免误触重复创建。
 
 ## 脚本说明
 
