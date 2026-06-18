@@ -3,6 +3,8 @@ set -Eeuo pipefail
 
 CC_SWITCH_INSTALL_URL="https://github.com/SaladDay/cc-switch-cli/releases/latest/download/install.sh"
 CC_SWITCH_INSTALL_URL_FAST="https://ghfast.top/${CC_SWITCH_INSTALL_URL}"
+GHFAST_PREFIX="${GHFAST_PREFIX:-https://ghfast.top/}"
+GHFAST_PREFIX="${GHFAST_PREFIX%/}/"
 
 PROVIDER_ID="ictrek"
 PROVIDER_NAME="ICTrek"
@@ -43,6 +45,25 @@ download_nonempty() {
   fi
 
   return 1
+}
+
+rewrite_github_urls_to_ghfast() {
+  local file="$1"
+
+  GHFAST_PREFIX="$GHFAST_PREFIX" python3 - "$file" <<'PY'
+import os
+import sys
+from pathlib import Path
+
+path = Path(sys.argv[1])
+prefix = os.environ["GHFAST_PREFIX"]
+content = path.read_text(encoding="utf-8")
+
+for url in ("https://github.com", "https://api.github.com", "https://raw.githubusercontent.com"):
+    content = content.replace(url, prefix + url)
+
+path.write_text(content, encoding="utf-8")
+PY
 }
 
 install_with_apt() {
@@ -231,7 +252,11 @@ install_cc_switch_if_needed() {
     exit 1
   fi
 
-  CC_SWITCH_FORCE=1 bash "$tmp"
+  if ! CC_SWITCH_FORCE=1 bash "$tmp"; then
+    warn "cc-switch-cli 直连 GitHub 安装失败，改用 ghfast.top 加速后重试。"
+    rewrite_github_urls_to_ghfast "$tmp"
+    CC_SWITCH_FORCE=1 bash "$tmp"
+  fi
   rm -f "$tmp"
 
   export PATH="$HOME/.local/bin:$PATH"
