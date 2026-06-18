@@ -44,7 +44,7 @@ CC_SWITCH_API_KEY="你的 API Key" bash <(curl -LfsS https://raw.githubuserconte
 CC_SWITCH_API_KEY="你的 API Key" CC_SWITCH_INSTALL_RTK=1 bash <(curl -LfsS https://raw.githubusercontent.com/huluxiaohuowa/cc_setup/main/cc_switch_setup.sh || curl -LfsS https://ghfast.top/https://raw.githubusercontent.com/huluxiaohuowa/cc_setup/main/cc_switch_setup.sh)
 ```
 
-`CC_SWITCH_INSTALL_RTK=1` 会安装/修复 `rtk` 到 `~/.local/bin`，并自动执行 `rtk init -g`。
+`CC_SWITCH_INSTALL_RTK=1` 会安装/修复 `rtk` 到 `~/.local/bin`，并自动执行 `rtk init -g`。RTK 是可选项，如果安装或初始化失败，脚本会继续完成 Claude 和 cc-switch 配置。
 
 已经安装过后，可以用一条命令把 `dummy-keys` 改成自己的 key：
 

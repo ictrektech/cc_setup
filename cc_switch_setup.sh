@@ -294,31 +294,36 @@ ensure_rtk() {
     tmp="$(mktemp)"
     if ! download_rtk_install "$tmp"; then
       rm -f "$tmp"
-      err "RTK install.sh 下载失败。"
-      exit 1
+      warn "RTK install.sh 下载失败。"
+      return 1
     fi
     RTK_INSTALL_DIR="$RTK_BIN_DIR" RTK_BIN_DIR="$RTK_BIN_DIR" bash "$tmp" || true
     rm -f "$tmp"
   fi
 
   if ! command -v rtk >/dev/null 2>&1; then
-    err "RTK 安装后仍不可用，请检查 $RTK_BIN_DIR 是否在 PATH 中。"
-    exit 1
+    warn "RTK 安装后仍不可用，请检查 $RTK_BIN_DIR 是否在 PATH 中。"
+    return 1
   fi
 
   if ! rtk --version >/dev/null 2>&1; then
-    err "rtk --version 执行失败，重新安装后仍不可用。"
-    exit 1
+    warn "rtk --version 执行失败，重新安装后仍不可用。"
+    return 1
   fi
 
   rtk --version || true
-  printf 'y\n' | rtk init -g || warn "rtk init -g 执行失败，但 rtk 已安装。"
+  if ! printf 'y\n' | rtk init -g; then
+    warn "rtk init -g 执行失败，但 rtk 已安装。"
+    return 1
+  fi
+
+  return 0
 }
 
 maybe_install_rtk() {
   case "${INSTALL_RTK}" in
     1|true|TRUE|yes|YES|y|Y|on|ON)
-      ensure_rtk
+      ensure_rtk || warn "RTK 自动安装/初始化失败，继续执行 Claude 和 cc-switch 安装。"
       ;;
     *)
       log "跳过 RTK 自动安装。如需安装，请使用：CC_SWITCH_INSTALL_RTK=1"
