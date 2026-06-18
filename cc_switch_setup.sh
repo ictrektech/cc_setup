@@ -478,6 +478,77 @@ print(settings_path)
 PY
 }
 
+disable_proxy_takeover() {
+  if need_cmd cc-switch; then
+    cc-switch --app claude proxy disable || warn "cc-switch CLI 关闭代理接管失败，使用数据库配置兜底。"
+  fi
+
+  python3 - <<'PY'
+import os
+import sqlite3
+from pathlib import Path
+
+config_dir = Path(os.environ.get("CC_SWITCH_CONFIG_DIR") or Path.home() / ".cc-switch")
+db_path = config_dir / "cc-switch.db"
+if not db_path.exists():
+    raise SystemExit(0)
+
+with sqlite3.connect(db_path) as conn:
+    conn.execute(
+        "UPDATE proxy_config SET enabled = 0, auto_failover_enabled = 0, updated_at = datetime('now') WHERE app_type = 'claude'"
+    )
+    other_enabled = conn.execute(
+        "SELECT COUNT(*) FROM proxy_config WHERE app_type != 'claude' AND enabled = 1"
+    ).fetchone()[0]
+    if other_enabled == 0:
+        conn.execute("UPDATE proxy_config SET proxy_enabled = 0, updated_at = datetime('now')")
+    conn.commit()
+
+print(db_path)
+PY
+}
+
+disable_claude_plugin_integration() {
+  python3 - <<'PY'
+import json
+import os
+from pathlib import Path
+
+home = Path.home()
+cc_switch_dir = Path(os.environ.get("CC_SWITCH_CONFIG_DIR") or home / ".cc-switch")
+settings_path = cc_switch_dir / "settings.json"
+claude_config_dir = home / ".claude"
+
+if settings_path.exists():
+    try:
+        settings = json.loads(settings_path.read_text(encoding="utf-8"))
+    except Exception:
+        settings = {}
+    if isinstance(settings, dict):
+        claude_config_dir = Path(settings.get("claudeConfigDir") or claude_config_dir)
+        settings["enableClaudePluginIntegration"] = False
+        settings_path.write_text(json.dumps(settings, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
+        print(settings_path)
+
+plugin_config_path = claude_config_dir / "config.json"
+if not plugin_config_path.exists():
+    raise SystemExit(0)
+
+try:
+    plugin_config = json.loads(plugin_config_path.read_text(encoding="utf-8"))
+except Exception:
+    raise SystemExit(0)
+
+if not isinstance(plugin_config, dict):
+    raise SystemExit(0)
+
+if plugin_config.get("primaryApiKey") == "any":
+    plugin_config.pop("primaryApiKey", None)
+    plugin_config_path.write_text(json.dumps(plugin_config, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
+    print(plugin_config_path)
+PY
+}
+
 uninstall_claude_code() {
   if ! need_cmd npm; then
     warn "未检测到 npm，跳过官方 Claude Code npm 包卸载。"
@@ -493,6 +564,8 @@ uninstall_claude_code() {
 }
 
 main() {
+  disable_proxy_takeover || warn "关闭 cc-switch 代理接管失败，继续清理其它项目。"
+  disable_claude_plugin_integration || warn "关闭 VS Code Claude 插件接管失败，继续清理其它项目。"
   remove_ictrek_provider || warn "移除 cc-switch provider 失败，继续清理其它项目。"
   clean_claude_settings || warn "清理 Claude settings 失败，继续清理其它项目。"
   uninstall_claude_code || warn "卸载官方 Claude Code 失败。"
@@ -632,6 +705,83 @@ PY
   cc-switch --app claude provider switch "$PROVIDER_ID"
 }
 
+enable_proxy_flags_direct() {
+  log "写入 cc-switch 代理接管开关兜底配置。"
+
+  python3 - <<'PY'
+import os
+import sqlite3
+from pathlib import Path
+
+config_dir = Path(os.environ.get("CC_SWITCH_CONFIG_DIR") or Path.home() / ".cc-switch")
+db_path = config_dir / "cc-switch.db"
+if not db_path.exists():
+    raise SystemExit(f"cc-switch 数据库不存在：{db_path}")
+
+with sqlite3.connect(db_path) as conn:
+    conn.execute("INSERT OR IGNORE INTO proxy_config (app_type) VALUES ('claude')")
+    conn.execute(
+        "UPDATE proxy_config SET proxy_enabled = 1, enabled = 1, updated_at = datetime('now') WHERE app_type = 'claude'"
+    )
+    conn.commit()
+
+print(db_path)
+PY
+}
+
+configure_claude_plugin_integration() {
+  log "打开 VS Code Claude 插件接管。"
+
+  python3 - <<'PY'
+import json
+import os
+from pathlib import Path
+
+home = Path.home()
+cc_switch_dir = Path(os.environ.get("CC_SWITCH_CONFIG_DIR") or home / ".cc-switch")
+cc_switch_dir.mkdir(parents=True, exist_ok=True)
+settings_path = cc_switch_dir / "settings.json"
+
+settings = {}
+if settings_path.exists():
+    try:
+        settings = json.loads(settings_path.read_text(encoding="utf-8"))
+    except Exception:
+        settings = {}
+if not isinstance(settings, dict):
+    settings = {}
+settings["enableClaudePluginIntegration"] = True
+settings_path.write_text(json.dumps(settings, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
+
+claude_config_dir = Path(settings.get("claudeConfigDir") or home / ".claude")
+claude_config_dir.mkdir(parents=True, exist_ok=True)
+plugin_config_path = claude_config_dir / "config.json"
+plugin_config = {}
+if plugin_config_path.exists():
+    try:
+        plugin_config = json.loads(plugin_config_path.read_text(encoding="utf-8"))
+    except Exception:
+        plugin_config = {}
+if not isinstance(plugin_config, dict):
+    plugin_config = {}
+plugin_config["primaryApiKey"] = "any"
+plugin_config_path.write_text(json.dumps(plugin_config, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
+
+print(settings_path)
+print(plugin_config_path)
+PY
+}
+
+enable_cc_switch_proxy_and_plugin() {
+  log "打开 cc-switch Claude 代理接管。"
+  if ! cc-switch --app claude proxy enable; then
+    warn "cc-switch CLI 打开代理接管失败，使用数据库配置兜底。"
+    enable_proxy_flags_direct
+  fi
+
+  configure_claude_plugin_integration
+}
+
 setup_claude_first_run_state() {
   log "关闭 Claude Code 首次打开登录/引导验证。"
 
@@ -691,6 +841,7 @@ main() {
   install_cc_switch_if_needed
   init_cc_switch_if_needed
   configure_cc_switch_provider
+  enable_cc_switch_proxy_and_plugin
   setup_claude_first_run_state
   write_management_scripts
 

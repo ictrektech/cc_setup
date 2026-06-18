@@ -4,9 +4,13 @@ Claude / RTK / skills / digital-workers 的一键安装脚本集合。
 
 ## Claude 环境安装
 
-### macOS / Linux（cc-switch 方案）
+这里提供两种互斥方案。推荐新机器优先使用 cc-switch 方案；如果已经在使用 cc-haha，可以继续使用 cc-haha 方案，或者运行 cc-switch 方案自动卸载 cc-haha 后切换。
 
-这个方案安装官方 Claude Code，并使用 [saladday/cc-switch-cli](https://github.com/saladday/cc-switch-cli) 配置 `https://ai.ictrek.com`。
+### 方案一：cc-switch + 官方 Claude Code（macOS / Linux）
+
+这个方案安装官方 `@anthropic-ai/claude-code`，安装 [saladday/cc-switch-cli](https://github.com/saladday/cc-switch-cli)，并自动配置 ICTrek provider。
+
+安装：
 
 ```bash
 bash <(curl -LfsS https://raw.githubusercontent.com/huluxiaohuowa/cc_setup/main/cc_switch_setup.sh || curl -LfsS https://ghfast.top/https://raw.githubusercontent.com/huluxiaohuowa/cc_setup/main/cc_switch_setup.sh)
@@ -18,7 +22,46 @@ fish shell 可以执行：
 bash -lc 'bash <(curl -LfsS https://raw.githubusercontent.com/huluxiaohuowa/cc_setup/main/cc_switch_setup.sh || curl -LfsS https://ghfast.top/https://raw.githubusercontent.com/huluxiaohuowa/cc_setup/main/cc_switch_setup.sh)'
 ```
 
-### macOS / Linux
+配置内容：
+
+```text
+API 地址: https://ai.ictrek.com
+API Key: dummy-keys
+Haiku 模型: volces/DeepSeek-V4-Flash
+Sonnet/Opus/默认模型: volces/GLM-5.1
+Provider ID: ictrek
+```
+
+脚本还会打开 Claude 代理接管和 VS Code Claude 插件接管，并关闭 Claude Code 首次打开登录/引导验证。
+
+查看配置：
+
+```bash
+cc-switch --app claude provider current
+cc-switch --app claude proxy show
+claude --help
+claude -p "hello"
+```
+
+更新：
+
+```bash
+claude-update
+```
+
+卸载：
+
+```bash
+claude-uninstall
+```
+
+卸载会移除 `ictrek` provider、关闭 Claude 代理接管、关闭 VS Code Claude 插件接管、卸载官方 Claude Code npm 包，并删除本方案写入的 `claude-update` / `claude-uninstall`。它不会删除 cc-switch 本体和 `~/.cc-switch` 里的其它 provider。
+
+### 方案二：cc-haha（macOS / Linux）
+
+这个方案安装 `NanmiCoder/cc-haha`，并写入 `claude`、`claude-haha`、`claude-env`、`claude-update`、`claude-uninstall`。
+
+安装：
 
 ```bash
 bash <(curl -LfsS https://raw.githubusercontent.com/huluxiaohuowa/cc_setup/main/cc_setup_unix.sh || curl -LfsS https://ghfast.top/https://raw.githubusercontent.com/huluxiaohuowa/cc_setup/main/cc_setup_unix.sh)
@@ -30,7 +73,35 @@ fish shell 可以执行：
 bash -lc 'bash <(curl -LfsS https://raw.githubusercontent.com/huluxiaohuowa/cc_setup/main/cc_setup_unix.sh || curl -LfsS https://ghfast.top/https://raw.githubusercontent.com/huluxiaohuowa/cc_setup/main/cc_setup_unix.sh)'
 ```
 
-### Windows
+配置方式：
+
+```bash
+claude-env
+```
+
+`claude-env` 会打开 cc-haha 安装目录中的 `.env`。修改保存后重新打开终端或重新运行命令即可。
+
+常用命令：
+
+```bash
+claude --help
+claude-haha --help
+claude -p "hello"
+```
+
+更新：
+
+```bash
+claude-update
+```
+
+卸载：
+
+```bash
+claude-uninstall
+```
+
+### Windows（cc-haha）
 
 在 PowerShell 中执行：
 
@@ -42,18 +113,7 @@ try { Invoke-WebRequest -Uri $url -OutFile $script -UseBasicParsing } catch { In
 powershell -NoProfile -ExecutionPolicy Bypass -File $script
 ```
 
-安装完成后重新打开终端，常用命令：
-
-```bash
-claude --help
-claude-haha --help
-claude -p "hello"
-claude-env
-claude-update
-claude-uninstall
-```
-
-Windows 下使用：
+配置、更新、卸载：
 
 ```powershell
 claude
@@ -120,7 +180,7 @@ http://<远端 IP>:3766
 
 ## 脚本说明
 
-- `cc_switch_setup.sh`: macOS / Linux 安装官方 Claude Code 和 cc-switch-cli，配置 ICTrek provider，并写入 `claude-update`、`claude-uninstall`。
+- `cc_switch_setup.sh`: macOS / Linux 安装官方 Claude Code 和 cc-switch-cli，配置 ICTrek provider，打开 Claude 代理接管和 VS Code Claude 插件接管，并写入 `claude-update`、`claude-uninstall`。
 - `cc_setup_unix.sh`: macOS / Linux 安装 Claude 环境、RTK，并写入 `claude`、`claude-env`、`claude-update`、`claude-uninstall`。
 - `cc_setup_win.ps1`: Windows PowerShell 安装 Claude 环境、RTK，并写入对应命令。
 - `dworkers_setup.sh`: 克隆/更新 `ictrektech/digital-workers`，重装 skills，生成 `.env` 和示例任务。
