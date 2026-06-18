@@ -3,8 +3,8 @@ $ErrorActionPreference = "Stop"
 $RepoUrl = "https://github.com/NanmiCoder/cc-haha"
 $RepoUrlFast = "https://ghfast.top/https://github.com/NanmiCoder/cc-haha"
 
-$EnvUrl = "https://gist.githubusercontent.com/huluxiaohuowa/804df4c68c28c0841150801e170d2449/raw/gistfile1.txt"
-$EnvUrlFast = "https://ghfast.top/https://gist.githubusercontent.com/huluxiaohuowa/804df4c68c28c0841150801e170d2449/raw/gistfile1.txt"
+$EnvUrl = "https://raw.githubusercontent.com/huluxiaohuowa/cc_setup/main/.env"
+$EnvUrlFast = "https://ghfast.top/" + $EnvUrl
 
 $GhfastPrefix = if ($env:GHFAST_PREFIX) { $env:GHFAST_PREFIX.TrimEnd("/") + "/" } else { "https://ghfast.top/" }
 $RtkInstallUrls = @(

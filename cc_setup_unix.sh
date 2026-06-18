@@ -4,8 +4,8 @@ set -Eeuo pipefail
 REPO_URL="https://github.com/NanmiCoder/cc-haha"
 REPO_URL_FAST="https://ghfast.top/https://github.com/NanmiCoder/cc-haha"
 
-ENV_URL="https://gist.githubusercontent.com/huluxiaohuowa/804df4c68c28c0841150801e170d2449/raw/gistfile1.txt"
-ENV_URL_FAST="https://ghfast.top/https://gist.githubusercontent.com/huluxiaohuowa/804df4c68c28c0841150801e170d2449/raw/gistfile1.txt"
+ENV_URL="https://raw.githubusercontent.com/huluxiaohuowa/cc_setup/main/.env"
+ENV_URL_FAST="https://ghfast.top/${ENV_URL}"
 
 GHFAST_PREFIX="${GHFAST_PREFIX:-https://ghfast.top/}"
 GHFAST_PREFIX="${GHFAST_PREFIX%/}/"
