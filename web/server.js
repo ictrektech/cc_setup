@@ -94,7 +94,7 @@ app.post("/api/sessions", (req, res) => {
   const command = resolveCommand();
   if (!command) {
     res.status(400).json({
-      error: "未找到 claude-haha 或 claude。可用 CLAUDE_HAHA_BIN=/path/to/claude-haha npm run dev 指定。"
+      error: "未找到 claude 或 claude-haha。可用 CLAUDE_BIN=/path/to/claude 或 CLAUDE_HAHA_BIN=/path/to/claude-haha npm run dev 指定。"
     });
     return;
   }
@@ -222,6 +222,6 @@ wss.on("connection", (ws, req) => {
 });
 
 server.listen(PORT, () => {
-  console.log(`cc-haha-room listening on http://localhost:${PORT}`);
+  console.log(`agent-room listening on http://localhost:${PORT}`);
   console.log(`Claude command: ${resolveCommand() || "not found"}`);
 });

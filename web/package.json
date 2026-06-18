@@ -1,8 +1,8 @@
 {
-  "name": "cc-haha-room",
+  "name": "agent-room",
   "version": "0.1.0",
   "private": true,
-  "description": "A local web console for managing Claude Code Haha sessions.",
+  "description": "A local web console for managing Claude agent sessions.",
   "type": "module",
   "scripts": {
     "dev": "bash dev.sh",

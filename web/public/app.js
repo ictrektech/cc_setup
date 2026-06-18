@@ -27,7 +27,10 @@ const els = {
   inspectCwd: document.querySelector("#inspectCwd")
 };
 
-els.cwd.value = localStorage.getItem("cc-haha-room.cwd") || "";
+const CWD_STORAGE_KEY = "agent-room.cwd";
+const LEGACY_CWD_STORAGE_KEY = "cc-haha-room.cwd";
+
+els.cwd.value = localStorage.getItem(CWD_STORAGE_KEY) || localStorage.getItem(LEGACY_CWD_STORAGE_KEY) || "";
 
 async function request(path, options = {}) {
   const response = await fetch(path, {
@@ -143,7 +146,7 @@ async function refresh() {
 els.form.addEventListener("submit", async (event) => {
   event.preventDefault();
   const cwd = els.cwd.value.trim();
-  localStorage.setItem("cc-haha-room.cwd", cwd);
+  localStorage.setItem(CWD_STORAGE_KEY, cwd);
 
   try {
     const session = await request("/api/sessions", {
