@@ -94,13 +94,118 @@ PY
 }
 
 ensure_local_bin_in_path() {
-  local sh_content='export PATH="$HOME/.local/bin:$PATH"'
-  local fish_content='fish_add_path "$HOME/.local/bin"'
+  local sh_content='export PATH="$HOME/.local/node/bin:$HOME/.local/npm/bin:$HOME/.local/bin:$PATH"'
+  local fish_content='fish_add_path "$HOME/.local/node/bin" "$HOME/.local/npm/bin" "$HOME/.local/bin"'
 
   upsert_shell_block "$HOME/.bashrc" "$sh_content"
   upsert_shell_block "$HOME/.zshrc" "$sh_content"
   upsert_shell_block "$HOME/.zprofile" "$sh_content"
   upsert_shell_block "$HOME/.config/fish/config.fish" "$fish_content"
+}
+
+setup_user_npm_prefix() {
+  mkdir -p "$HOME/.local/bin" "$HOME/.local/npm" "$HOME/.local/node"
+  export PATH="$HOME/.local/node/bin:$HOME/.local/npm/bin:$HOME/.local/bin:$PATH"
+  export NPM_CONFIG_PREFIX="$HOME/.local/npm"
+
+  if need_cmd npm; then
+    npm config set prefix "$HOME/.local/npm" >/dev/null 2>&1 || true
+  fi
+}
+
+node_major_version() {
+  if ! need_cmd node; then
+    echo 0
+    return 0
+  fi
+
+  node -p 'Number(process.versions.node.split(".")[0])' 2>/dev/null || echo 0
+}
+
+node_version_is_supported() {
+  [ "$(node_major_version)" -ge 18 ]
+}
+
+install_node_with_nodesource() {
+  if [ "$OS_TYPE" = "macos" ]; then
+    return 1
+  fi
+
+  if ! need_cmd apt; then
+    return 1
+  fi
+
+  local tmp
+  tmp="$(mktemp)"
+  if ! curl -LfsS --connect-timeout 10 --max-time 120 https://deb.nodesource.com/setup_20.x -o "$tmp"; then
+    rm -f "$tmp"
+    return 1
+  fi
+
+  warn "将通过 NodeSource 安装 Node.js 20。接下来可能需要你输入 sudo 密码授权。"
+  if ! sudo -E bash "$tmp"; then
+    rm -f "$tmp"
+    return 1
+  fi
+  rm -f "$tmp"
+
+  sudo apt install -y nodejs
+}
+
+install_node_from_tarball() {
+  if [ "$OS_TYPE" = "macos" ]; then
+    return 1
+  fi
+
+  local arch platform index tmp tarball_name url
+  platform="linux"
+
+  case "$(uname -m)" in
+    x86_64|amd64) arch="x64" ;;
+    aarch64|arm64) arch="arm64" ;;
+    armv7l) arch="armv7l" ;;
+    *)
+      err "当前架构暂不支持自动安装 Node.js：$(uname -m)"
+      return 1
+      ;;
+  esac
+
+  index="$(mktemp)"
+  if ! curl -LfsS --connect-timeout 10 --max-time 120 https://nodejs.org/dist/latest-v20.x/SHASUMS256.txt -o "$index"; then
+    rm -f "$index"
+    return 1
+  fi
+
+  tarball_name="$(awk -v platform="$platform" -v arch="$arch" '$2 ~ "node-v.*-" platform "-" arch "\\.tar\\.xz$" { print $2; exit }' "$index")"
+  rm -f "$index"
+
+  if [ -z "$tarball_name" ]; then
+    err "未找到适配当前平台的 Node.js 20 安装包。"
+    return 1
+  fi
+
+  if ! need_cmd tar; then
+    install_with_apt tar
+  fi
+
+  tmp="$(mktemp -d)"
+  url="https://nodejs.org/dist/latest-v20.x/${tarball_name}"
+  log "下载 Node.js 20：$url"
+  if ! curl -LfsS --connect-timeout 10 --max-time 300 "$url" -o "$tmp/node.tar.xz"; then
+    rm -rf "$tmp"
+    return 1
+  fi
+
+  rm -rf "$HOME/.local/node"
+  mkdir -p "$HOME/.local/node"
+  if ! tar -xJf "$tmp/node.tar.xz" -C "$HOME/.local/node" --strip-components=1; then
+    warn "解压 Node.js 失败，尝试安装 xz-utils 后重试。"
+    install_with_apt xz-utils
+    tar -xJf "$tmp/node.tar.xz" -C "$HOME/.local/node" --strip-components=1
+  fi
+  rm -rf "$tmp"
+
+  export PATH="$HOME/.local/node/bin:$PATH"
 }
 
 install_with_apt() {
@@ -158,18 +263,29 @@ install_basic_tools_if_needed() {
   fi
 }
 
-install_npm_if_needed() {
-  if need_cmd npm; then
-    log "npm 已存在：$(npm --version)"
-    return 0
-  fi
+ensure_node_npm() {
+  setup_user_npm_prefix
 
   if [ "$OS_TYPE" = "macos" ]; then
-    warn "未检测到 npm，将通过 Homebrew 安装 node。"
-    install_with_brew node
+    if ! need_cmd node || ! node_version_is_supported || ! need_cmd npm; then
+      warn "未检测到 Node.js >= 18/npm，将通过 Homebrew 安装 node。"
+      install_with_brew node
+      setup_user_npm_prefix
+    fi
   else
-    warn "未检测到 npm，将通过 apt 安装 nodejs/npm。"
-    install_with_apt nodejs npm
+    if ! need_cmd node || ! node_version_is_supported || ! need_cmd npm; then
+      warn "当前 Node.js 不可用或版本过低，需要 Node.js >= 18。"
+      if ! install_node_with_nodesource; then
+        warn "NodeSource 安装失败，改为安装用户目录版 Node.js 20。"
+        install_node_from_tarball
+      fi
+      setup_user_npm_prefix
+    fi
+  fi
+
+  if ! need_cmd node || ! node_version_is_supported; then
+    err "Node.js 版本仍不满足要求。当前版本：$(node --version 2>/dev/null || echo not-found)，需要 >= 18。"
+    exit 1
   fi
 
   if ! need_cmd npm; then
@@ -177,7 +293,8 @@ install_npm_if_needed() {
     exit 1
   fi
 
-  log "npm 安装完成：$(npm --version)"
+  log "Node.js 已就绪：$(node --version)"
+  log "npm 已就绪：$(npm --version)，全局 prefix：$(npm config get prefix)"
 }
 
 claude_path_looks_like_cc_haha() {
@@ -210,7 +327,7 @@ has_official_claude_code() {
   fi
 
   case "$claude_path" in
-    */node_modules/@anthropic-ai/claude-code/*|*/.npm-global/bin/claude|*/npm/bin/claude)
+    */node_modules/@anthropic-ai/claude-code/*|*/.npm-global/bin/claude|*/.local/npm/bin/claude|*/npm/bin/claude)
       return 0
       ;;
   esac
@@ -255,16 +372,15 @@ install_claude_code_if_needed() {
     return 0
   fi
 
-  log "安装官方 Claude Code：npm install -g @anthropic-ai/claude-code"
-  if ! npm install -g @anthropic-ai/claude-code; then
-    warn "普通 npm 全局安装失败，尝试 sudo npm install -g。"
-    sudo npm install -g @anthropic-ai/claude-code
-  fi
+  setup_user_npm_prefix
+
+  log "安装官方 Claude Code 到用户目录：npm install -g @anthropic-ai/claude-code"
+  npm install -g @anthropic-ai/claude-code
 
   hash -r 2>/dev/null || true
 
   if ! need_cmd claude; then
-    err "Claude Code 安装后未找到 claude 命令，请检查 npm global bin 是否在 PATH 中。"
+    err "Claude Code 安装后未找到 claude 命令，请检查 ~/.local/npm/bin 是否在 PATH 中。"
     exit 1
   fi
 
@@ -550,6 +666,9 @@ PY
 }
 
 uninstall_claude_code() {
+  export PATH="$HOME/.local/node/bin:$HOME/.local/npm/bin:$HOME/.local/bin:$PATH"
+  export NPM_CONFIG_PREFIX="$HOME/.local/npm"
+
   if ! need_cmd npm; then
     warn "未检测到 npm，跳过官方 Claude Code npm 包卸载。"
     return 0
@@ -557,7 +676,7 @@ uninstall_claude_code() {
 
   if npm list -g @anthropic-ai/claude-code --depth=0 >/dev/null 2>&1; then
     log "卸载官方 Claude Code npm 包。"
-    npm uninstall -g @anthropic-ai/claude-code || sudo npm uninstall -g @anthropic-ai/claude-code
+    npm uninstall -g @anthropic-ai/claude-code
   else
     warn "未检测到全局 @anthropic-ai/claude-code，跳过 npm 卸载。"
   fi
@@ -834,8 +953,8 @@ PY
 
 main() {
   install_basic_tools_if_needed
-  install_npm_if_needed
   ensure_local_bin_in_path
+  ensure_node_npm
   uninstall_cc_haha_if_needed
   install_claude_code_if_needed
   install_cc_switch_if_needed
