@@ -83,9 +83,31 @@ CLAUDE_BIN=claude-haha python3 -m digital_worker.runner full \
   "<项目目录>"
 ```
 
+## Claude Haha Room Web 控制台
+
+仓库里新增了一个本地 Web 控制台，当前只支持这里安装的 Claude Code Haha。它会优先使用 `claude` 命令，找不到时回退到 `claude-haha`。
+
+```bash
+cd web
+bash dev.sh
+```
+
+默认端口：
+
+```text
+http://localhost:3766
+```
+
+在远端机器上运行后，可以直接打开：
+
+```text
+http://<远端 IP>:3766
+```
+
 ## 脚本说明
 
 - `cc_setup_unix.sh`: macOS / Linux 安装 Claude 环境、RTK，并写入 `claude`、`claude-env`、`claude-update`、`claude-uninstall`。
 - `cc_setup_win.ps1`: Windows PowerShell 安装 Claude 环境、RTK，并写入对应命令。
 - `dworkers_setup.sh`: 克隆/更新 `ictrektech/digital-workers`，重装 skills，生成 `.env` 和示例任务。
 - `digital_workers_setup.sh`: 兼容入口，本地执行时转到 `dworkers_setup.sh`，远程执行时拉取 `dworkers_setup.sh`。
+- `web/`: Claude Haha Room Web 控制台，提供项目目录选择、会话启动、实时终端输出和多会话切换。

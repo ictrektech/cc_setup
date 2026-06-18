@@ -1,0 +1,100 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Claude Haha Room</title>
+    <link rel="stylesheet" href="/styles.css" />
+  </head>
+  <body>
+    <aside class="rail">
+      <div class="brand">
+        <div class="mark">C</div>
+        <div>
+          <strong>Claude Haha Room</strong>
+          <span>Claude Code Haha 编排台</span>
+        </div>
+      </div>
+
+      <section class="panel launch-panel">
+        <div class="panel-head">
+          <span>新建房间</span>
+          <b id="commandBadge">检测中</b>
+        </div>
+        <form id="launchForm" class="launch">
+          <label>
+            项目目录
+            <input id="cwd" name="cwd" autocomplete="off" placeholder="/home/jhu/dev/repos/cc-haha" />
+          </label>
+          <label>
+            任务指令
+            <textarea id="prompt" name="prompt" rows="5" placeholder="描述你希望 Claude 做什么"></textarea>
+          </label>
+          <button type="submit">启动 agent</button>
+        </form>
+      </section>
+
+      <section class="project-stack">
+        <div class="section-title">项目</div>
+        <button class="project active" type="button">
+          <span>当前项目</span>
+          <strong id="projectName">未选择</strong>
+        </button>
+        <button class="project" type="button">
+          <span>Agent 类型</span>
+          <strong>Claude Code Haha</strong>
+        </button>
+      </section>
+    </aside>
+
+    <main class="app">
+      <header class="topbar">
+        <div>
+          <p class="eyebrow">ROOM OVERVIEW</p>
+          <h1>Agent 工作间</h1>
+        </div>
+        <div class="stats">
+          <div><span id="runningCount">0</span><b>运行中</b></div>
+          <div><span id="doneCount">0</span><b>已结束</b></div>
+          <div><span id="totalCount">0</span><b>会话</b></div>
+        </div>
+      </header>
+
+      <section class="room-grid" id="sessionList"></section>
+
+      <section class="workbench">
+        <div class="terminal-panel">
+          <div class="terminal-head">
+            <div>
+              <strong id="activeTitle">还没有会话</strong>
+              <span id="activeMeta">选择项目目录，启动一个 Claude agent</span>
+            </div>
+            <div class="actions">
+              <button id="clearBtn" class="ghost" type="button" disabled>清屏</button>
+              <button id="stopBtn" class="danger" type="button" disabled>停止</button>
+            </div>
+          </div>
+          <pre id="terminal" aria-label="agent 输出"></pre>
+        </div>
+
+        <aside class="inspector">
+          <div class="section-title">当前房间</div>
+          <dl>
+            <dt>状态</dt>
+            <dd id="inspectStatus">空闲</dd>
+            <dt>命令</dt>
+            <dd id="inspectCommand">-</dd>
+            <dt>目录</dt>
+            <dd id="inspectCwd">-</dd>
+          </dl>
+          <form id="composer" class="composer">
+            <textarea id="message" rows="6" placeholder="给当前 agent 发送下一条指令" disabled></textarea>
+            <button id="sendBtn" type="submit" disabled>发送</button>
+          </form>
+        </aside>
+      </section>
+    </main>
+
+    <script type="module" src="/app.js"></script>
+  </body>
+</html>
