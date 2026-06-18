@@ -883,10 +883,11 @@ main() {
   chmod +x "$TARGET_DIR/bin/claude-haha" 2>/dev/null || true
   sync_claude_command
   repair_claude_configs
-  ensure_rtk
   write_claude_env_script
   write_claude_uninstall_script
   restore_shell_config
+  export PATH="$TARGET_DIR/bin:$PATH"
+  ensure_rtk
   log "更新完成。重新打开终端后 claude / claude-haha / claude-env / claude-update / claude-uninstall 应正常可用。"
 }
 main "$@"
@@ -949,11 +950,12 @@ main() {
   replace_env_file "$INSTALL_DIR"
   install_deps "$INSTALL_DIR"
   repair_claude_configs
-  ensure_rtk
   write_claude_env_script "$INSTALL_DIR"
   write_claude_update_script "$INSTALL_DIR"
   write_claude_uninstall_script "$INSTALL_DIR"
   configure_shell_path "$INSTALL_DIR"
+  export PATH="$INSTALL_DIR/bin:$PATH"
+  ensure_rtk
 
   echo ""
   log "安装完成。"

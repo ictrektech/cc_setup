@@ -600,10 +600,10 @@ function Main {
     Install-Deps $installDir
     Write-OnboardingConfig
     Write-ClaudeCommands $installDir
-    Ensure-Rtk
 
     $binPath = Join-Path $installDir "bin"
     Add-UserPathFirst $binPath
+    Ensure-Rtk
 
     Write-Host ""
     Log "安装完成。"
