@@ -6,14 +6,36 @@ Claude / RTK / skills / digital-workers 的一键安装脚本集合。
 
 ### macOS / Linux
 
+先下载脚本：
+
 ```bash
-bash <(curl -LfsS https://raw.githubusercontent.com/huluxiaohuowa/cc_setup/main/cc_setup_unix.sh || curl -LfsS https://ghfast.top/https://raw.githubusercontent.com/huluxiaohuowa/cc_setup/main/cc_setup_unix.sh)
+SCRIPT=/tmp/cc_setup_unix.sh
+URL=https://raw.githubusercontent.com/huluxiaohuowa/cc_setup/main/cc_setup_unix.sh
+FAST_URL=https://ghfast.top/https://raw.githubusercontent.com/huluxiaohuowa/cc_setup/main/cc_setup_unix.sh
+curl -LfsS "$URL" -o "$SCRIPT" || curl -LfsS "$FAST_URL" -o "$SCRIPT"
+```
+
+再执行脚本：
+
+```bash
+bash "$SCRIPT"
 ```
 
 fish shell 可以执行：
 
+先下载脚本：
+
 ```fish
-bash -lc 'bash <(curl -LfsS https://raw.githubusercontent.com/huluxiaohuowa/cc_setup/main/cc_setup_unix.sh || curl -LfsS https://ghfast.top/https://raw.githubusercontent.com/huluxiaohuowa/cc_setup/main/cc_setup_unix.sh)'
+set SCRIPT /tmp/cc_setup_unix.sh
+set URL https://raw.githubusercontent.com/huluxiaohuowa/cc_setup/main/cc_setup_unix.sh
+set FAST_URL https://ghfast.top/https://raw.githubusercontent.com/huluxiaohuowa/cc_setup/main/cc_setup_unix.sh
+curl -LfsS "$URL" -o "$SCRIPT"; or curl -LfsS "$FAST_URL" -o "$SCRIPT"
+```
+
+再执行脚本：
+
+```fish
+bash "$SCRIPT"
 ```
 
 ### Windows
@@ -21,7 +43,11 @@ bash -lc 'bash <(curl -LfsS https://raw.githubusercontent.com/huluxiaohuowa/cc_s
 在 PowerShell 中执行：
 
 ```powershell
-powershell -NoProfile -ExecutionPolicy Bypass -Command "try { irm 'https://raw.githubusercontent.com/huluxiaohuowa/cc_setup/main/cc_setup_win.ps1' | iex } catch { irm 'https://ghfast.top/https://raw.githubusercontent.com/huluxiaohuowa/cc_setup/main/cc_setup_win.ps1' | iex }"
+$script = Join-Path $env:TEMP "cc_setup_win.ps1"
+$url = "https://raw.githubusercontent.com/huluxiaohuowa/cc_setup/main/cc_setup_win.ps1"
+$fastUrl = "https://ghfast.top/https://raw.githubusercontent.com/huluxiaohuowa/cc_setup/main/cc_setup_win.ps1"
+try { Invoke-WebRequest -Uri $url -OutFile $script -UseBasicParsing } catch { Invoke-WebRequest -Uri $fastUrl -OutFile $script -UseBasicParsing }
+powershell -NoProfile -ExecutionPolicy Bypass -File $script
 ```
 
 安装完成后重新打开终端，常用命令：
@@ -48,20 +74,53 @@ claude-uninstall
 
 安装并更新 digital-workers，同时重新安装仓库里的 skills 到 `~/.claude/skills`：
 
+先下载脚本：
+
 ```bash
-bash <(curl -LfsS https://raw.githubusercontent.com/huluxiaohuowa/cc_setup/main/dworkers_setup.sh || curl -LfsS https://ghfast.top/https://raw.githubusercontent.com/huluxiaohuowa/cc_setup/main/dworkers_setup.sh)
+SCRIPT=/tmp/dworkers_setup.sh
+URL=https://raw.githubusercontent.com/huluxiaohuowa/cc_setup/main/dworkers_setup.sh
+FAST_URL=https://ghfast.top/https://raw.githubusercontent.com/huluxiaohuowa/cc_setup/main/dworkers_setup.sh
+curl -LfsS "$URL" -o "$SCRIPT" || curl -LfsS "$FAST_URL" -o "$SCRIPT"
+```
+
+再执行脚本：
+
+```bash
+bash "$SCRIPT"
 ```
 
 指定项目目录：
 
+先下载脚本：
+
 ```bash
-bash <(curl -LfsS https://raw.githubusercontent.com/huluxiaohuowa/cc_setup/main/dworkers_setup.sh || curl -LfsS https://ghfast.top/https://raw.githubusercontent.com/huluxiaohuowa/cc_setup/main/dworkers_setup.sh) ~/projects/demo
+SCRIPT=/tmp/dworkers_setup.sh
+URL=https://raw.githubusercontent.com/huluxiaohuowa/cc_setup/main/dworkers_setup.sh
+FAST_URL=https://ghfast.top/https://raw.githubusercontent.com/huluxiaohuowa/cc_setup/main/dworkers_setup.sh
+curl -LfsS "$URL" -o "$SCRIPT" || curl -LfsS "$FAST_URL" -o "$SCRIPT"
+```
+
+再执行脚本：
+
+```bash
+bash "$SCRIPT" ~/projects/demo
 ```
 
 如果 Claude 命令不在 PATH 中，可以指定：
 
+先下载脚本：
+
 ```bash
-CLAUDE_BIN=claude-haha bash <(curl -LfsS https://raw.githubusercontent.com/huluxiaohuowa/cc_setup/main/dworkers_setup.sh || curl -LfsS https://ghfast.top/https://raw.githubusercontent.com/huluxiaohuowa/cc_setup/main/dworkers_setup.sh)
+SCRIPT=/tmp/dworkers_setup.sh
+URL=https://raw.githubusercontent.com/huluxiaohuowa/cc_setup/main/dworkers_setup.sh
+FAST_URL=https://ghfast.top/https://raw.githubusercontent.com/huluxiaohuowa/cc_setup/main/dworkers_setup.sh
+curl -LfsS "$URL" -o "$SCRIPT" || curl -LfsS "$FAST_URL" -o "$SCRIPT"
+```
+
+再执行脚本：
+
+```bash
+CLAUDE_BIN=claude-haha bash "$SCRIPT"
 ```
 
 安装完成后，脚本会输出项目目录，并生成示例任务。进入项目目录运行：
