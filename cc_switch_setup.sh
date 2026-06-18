@@ -11,7 +11,7 @@ GHFAST_PREFIX="${GHFAST_PREFIX%/}/"
 PROVIDER_ID="ictrek"
 PROVIDER_NAME="ICTrek"
 API_BASE_URL="https://ai.ictrek.com"
-API_KEY="dummy-keys"
+API_KEY="${CC_SWITCH_API_KEY:-${API_KEY:-dummy-keys}}"
 HAIKU_MODEL="volces/DeepSeek-V4-Flash"
 DEFAULT_MODEL="volces/GLM-5.1"
 

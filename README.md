@@ -26,11 +26,31 @@ bash -lc 'bash <(curl -LfsS https://raw.githubusercontent.com/huluxiaohuowa/cc_s
 
 ```text
 API 地址: https://ai.ictrek.com
-API Key: dummy-keys
+API Key: dummy-keys（占位，安装后请改成自己的 key）
 Haiku 模型: volces/DeepSeek-V4-Flash
 Sonnet/Opus/默认模型: volces/GLM-5.1
 Provider ID: ictrek
 ```
+
+安装时直接写入自己的 API Key：
+
+```bash
+CC_SWITCH_API_KEY="你的 API Key" bash <(curl -LfsS https://raw.githubusercontent.com/huluxiaohuowa/cc_setup/main/cc_switch_setup.sh || curl -LfsS https://ghfast.top/https://raw.githubusercontent.com/huluxiaohuowa/cc_setup/main/cc_switch_setup.sh)
+```
+
+已经安装过后，可以用一条命令把 `dummy-keys` 改成自己的 key：
+
+```bash
+CC_SWITCH_API_KEY="你的 API Key" claude-update
+```
+
+如果当前终端还没重新加载 PATH，可以执行：
+
+```bash
+CC_SWITCH_API_KEY="你的 API Key" ~/.local/bin/claude-update
+```
+
+这条命令会重新写入 cc-switch 的 `ictrek` provider，并同步 Claude 配置。
 
 脚本还会打开 Claude 代理接管和 VS Code Claude 插件接管，并关闭 Claude Code 首次打开登录/引导验证。
 
