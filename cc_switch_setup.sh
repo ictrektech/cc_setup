@@ -3,6 +3,8 @@ set -Eeuo pipefail
 
 CC_SWITCH_INSTALL_URL="https://github.com/SaladDay/cc-switch-cli/releases/latest/download/install.sh"
 CC_SWITCH_INSTALL_URL_FAST="https://ghfast.top/${CC_SWITCH_INSTALL_URL}"
+SELF_SCRIPT_URL="https://raw.githubusercontent.com/huluxiaohuowa/cc_setup/main/cc_switch_setup.sh"
+SELF_SCRIPT_URL_FAST="https://ghfast.top/${SELF_SCRIPT_URL}"
 GHFAST_PREFIX="${GHFAST_PREFIX:-https://ghfast.top/}"
 GHFAST_PREFIX="${GHFAST_PREFIX%/}/"
 
@@ -64,6 +66,41 @@ for url in ("https://github.com", "https://api.github.com", "https://raw.githubu
 
 path.write_text(content, encoding="utf-8")
 PY
+}
+
+upsert_shell_block() {
+  local file="$1"
+  local content="$2"
+  local begin="# >>> cc-switch setup >>>"
+  local end="# <<< cc-switch setup <<<"
+
+  mkdir -p "$(dirname "$file")"
+  touch "$file"
+
+  python3 - "$file" "$begin" "$end" "$content" <<'PY'
+import sys
+from pathlib import Path
+
+path = Path(sys.argv[1])
+begin, end, content = sys.argv[2], sys.argv[3], sys.argv[4]
+old = path.read_text(encoding="utf-8", errors="ignore") if path.exists() else ""
+while begin in old and end in old:
+    start = old.index(begin)
+    finish = old.index(end, start) + len(end)
+    old = old[:start].rstrip() + "\n" + old[finish:].lstrip()
+new = old.rstrip() + "\n\n" + begin + "\n" + content.rstrip() + "\n" + end + "\n"
+path.write_text(new, encoding="utf-8")
+PY
+}
+
+ensure_local_bin_in_path() {
+  local sh_content='export PATH="$HOME/.local/bin:$PATH"'
+  local fish_content='fish_add_path "$HOME/.local/bin"'
+
+  upsert_shell_block "$HOME/.bashrc" "$sh_content"
+  upsert_shell_block "$HOME/.zshrc" "$sh_content"
+  upsert_shell_block "$HOME/.zprofile" "$sh_content"
+  upsert_shell_block "$HOME/.config/fish/config.fish" "$fish_content"
 }
 
 install_with_apt() {
@@ -273,6 +310,213 @@ install_cc_switch_if_needed() {
   log "cc-switch 安装完成：$(command -v cc-switch)"
 }
 
+write_management_scripts() {
+  local bin_dir="$HOME/.local/bin"
+  local update_script="$bin_dir/claude-update"
+  local uninstall_script="$bin_dir/claude-uninstall"
+
+  mkdir -p "$bin_dir"
+
+  cat > "$update_script" <<'EOF'
+#!/usr/bin/env bash
+set -Eeuo pipefail
+
+SELF_SCRIPT_URL="https://raw.githubusercontent.com/huluxiaohuowa/cc_setup/main/cc_switch_setup.sh"
+SELF_SCRIPT_URL_FAST="https://ghfast.top/${SELF_SCRIPT_URL}"
+
+log() { echo -e "\033[1;32m[INFO]\033[0m $*"; }
+warn() { echo -e "\033[1;33m[WARN]\033[0m $*"; }
+err() { echo -e "\033[1;31m[ERR]\033[0m $*" >&2; }
+
+download_nonempty() {
+  local primary="$1"
+  local fallback="$2"
+  local output="$3"
+
+  rm -f "$output"
+
+  if curl -LfsS --connect-timeout 10 --max-time 120 "$primary" -o "$output" && [ -s "$output" ]; then
+    return 0
+  fi
+
+  warn "主地址下载失败或为空，尝试备用地址：$fallback"
+  rm -f "$output"
+
+  if curl -LfsS --connect-timeout 10 --max-time 120 "$fallback" -o "$output" && [ -s "$output" ]; then
+    return 0
+  fi
+
+  return 1
+}
+
+main() {
+  local tmp
+  tmp="$(mktemp)"
+
+  log "拉取最新版 cc_switch_setup.sh 并重新执行安装/配置。"
+  if ! download_nonempty "$SELF_SCRIPT_URL" "$SELF_SCRIPT_URL_FAST" "$tmp"; then
+    rm -f "$tmp"
+    err "cc_switch_setup.sh 下载失败。"
+    exit 1
+  fi
+
+  bash "$tmp" "$@"
+  rm -f "$tmp"
+}
+
+main "$@"
+EOF
+
+  cat > "$uninstall_script" <<'EOF'
+#!/usr/bin/env bash
+set -Eeuo pipefail
+
+PROVIDER_ID="ictrek"
+API_BASE_URL="https://ai.ictrek.com"
+API_KEY="dummy-keys"
+HAIKU_MODEL="volces/DeepSeek-V4-Flash"
+DEFAULT_MODEL="volces/GLM-5.1"
+
+log() { echo -e "\033[1;32m[INFO]\033[0m $*"; }
+warn() { echo -e "\033[1;33m[WARN]\033[0m $*"; }
+
+need_cmd() {
+  command -v "$1" >/dev/null 2>&1
+}
+
+remove_shell_block() {
+  local file="$1"
+  local begin="# >>> cc-switch setup >>>"
+  local end="# <<< cc-switch setup <<<"
+
+  [ -f "$file" ] || return 0
+
+  python3 - "$file" "$begin" "$end" <<'PY'
+import sys
+from pathlib import Path
+
+path = Path(sys.argv[1])
+begin, end = sys.argv[2], sys.argv[3]
+old = path.read_text(encoding="utf-8", errors="ignore") if path.exists() else ""
+while begin in old and end in old:
+    start = old.index(begin)
+    finish = old.index(end, start) + len(end)
+    old = old[:start].rstrip() + "\n" + old[finish:].lstrip()
+path.write_text(old, encoding="utf-8")
+PY
+}
+
+remove_ictrek_provider() {
+  PROVIDER_ID="$PROVIDER_ID" python3 - <<'PY'
+import os
+import sqlite3
+from pathlib import Path
+
+config_dir = Path(os.environ.get("CC_SWITCH_CONFIG_DIR") or Path.home() / ".cc-switch")
+db_path = config_dir / "cc-switch.db"
+if not db_path.exists():
+    raise SystemExit(0)
+
+provider_id = os.environ["PROVIDER_ID"]
+with sqlite3.connect(db_path) as conn:
+    current = conn.execute(
+        "SELECT is_current FROM providers WHERE id = ? AND app_type = 'claude'",
+        (provider_id,),
+    ).fetchone()
+    conn.execute("DELETE FROM providers WHERE id = ? AND app_type = 'claude'", (provider_id,))
+    if current and current[0]:
+        conn.execute("UPDATE providers SET is_current = 0 WHERE app_type = 'claude'")
+    conn.commit()
+
+print(db_path)
+PY
+}
+
+clean_claude_settings() {
+  API_BASE_URL="$API_BASE_URL" \
+  API_KEY="$API_KEY" \
+  HAIKU_MODEL="$HAIKU_MODEL" \
+  DEFAULT_MODEL="$DEFAULT_MODEL" \
+  python3 - <<'PY'
+import json
+import os
+from pathlib import Path
+
+settings_path = Path.home() / ".claude" / "settings.json"
+if not settings_path.exists():
+    raise SystemExit(0)
+
+try:
+    data = json.loads(settings_path.read_text(encoding="utf-8"))
+except Exception:
+    raise SystemExit(0)
+
+if not isinstance(data, dict):
+    raise SystemExit(0)
+
+env = data.get("env")
+if isinstance(env, dict):
+    expected = {
+        "ANTHROPIC_API_KEY": os.environ["API_KEY"],
+        "ANTHROPIC_BASE_URL": os.environ["API_BASE_URL"],
+        "ANTHROPIC_MODEL": os.environ["DEFAULT_MODEL"],
+        "ANTHROPIC_DEFAULT_HAIKU_MODEL": os.environ["HAIKU_MODEL"],
+        "ANTHROPIC_DEFAULT_SONNET_MODEL": os.environ["DEFAULT_MODEL"],
+        "ANTHROPIC_DEFAULT_OPUS_MODEL": os.environ["DEFAULT_MODEL"],
+        "CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC": "1",
+    }
+    for key, value in expected.items():
+        if env.get(key) == value:
+            env.pop(key, None)
+    if env:
+        data["env"] = env
+    else:
+        data.pop("env", None)
+
+settings_path.write_text(json.dumps(data, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
+print(settings_path)
+PY
+}
+
+uninstall_claude_code() {
+  if ! need_cmd npm; then
+    warn "未检测到 npm，跳过官方 Claude Code npm 包卸载。"
+    return 0
+  fi
+
+  if npm list -g @anthropic-ai/claude-code --depth=0 >/dev/null 2>&1; then
+    log "卸载官方 Claude Code npm 包。"
+    npm uninstall -g @anthropic-ai/claude-code || sudo npm uninstall -g @anthropic-ai/claude-code
+  else
+    warn "未检测到全局 @anthropic-ai/claude-code，跳过 npm 卸载。"
+  fi
+}
+
+main() {
+  remove_ictrek_provider || warn "移除 cc-switch provider 失败，继续清理其它项目。"
+  clean_claude_settings || warn "清理 Claude settings 失败，继续清理其它项目。"
+  uninstall_claude_code || warn "卸载官方 Claude Code 失败。"
+
+  remove_shell_block "$HOME/.bashrc"
+  remove_shell_block "$HOME/.zshrc"
+  remove_shell_block "$HOME/.zprofile"
+  remove_shell_block "$HOME/.config/fish/config.fish"
+
+  rm -f "$HOME/.local/bin/claude-update" "$HOME/.local/bin/claude-uninstall"
+
+  log "已卸载 cc-switch Claude 方案。"
+  warn "未删除 cc-switch 本体和 ~/.cc-switch 其它配置，避免影响你已有的 provider。"
+  warn "如当前 shell 缓存了命令，请执行：hash -r 2>/dev/null || true；fish 请重新打开终端。"
+}
+
+main "$@"
+EOF
+
+  chmod +x "$update_script" "$uninstall_script"
+  log "claude-update 命令已写入：$update_script"
+  log "claude-uninstall 命令已写入：$uninstall_script"
+}
+
 init_cc_switch_if_needed() {
   log "初始化 cc-switch 配置。"
   cc-switch --app claude provider list >/dev/null 2>&1 || true
@@ -441,14 +685,17 @@ PY
 main() {
   install_basic_tools_if_needed
   install_npm_if_needed
+  ensure_local_bin_in_path
   uninstall_cc_haha_if_needed
   install_claude_code_if_needed
   install_cc_switch_if_needed
   init_cc_switch_if_needed
   configure_cc_switch_provider
   setup_claude_first_run_state
+  write_management_scripts
 
   log "完成。重新打开终端后可执行：claude"
+  log "管理命令：claude-update / claude-uninstall"
   log "cc-switch provider：$PROVIDER_ID -> $API_BASE_URL"
 }
 

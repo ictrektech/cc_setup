@@ -120,7 +120,7 @@ http://<远端 IP>:3766
 
 ## 脚本说明
 
-- `cc_switch_setup.sh`: macOS / Linux 安装官方 Claude Code 和 cc-switch-cli，并配置 ICTrek provider。
+- `cc_switch_setup.sh`: macOS / Linux 安装官方 Claude Code 和 cc-switch-cli，配置 ICTrek provider，并写入 `claude-update`、`claude-uninstall`。
 - `cc_setup_unix.sh`: macOS / Linux 安装 Claude 环境、RTK，并写入 `claude`、`claude-env`、`claude-update`、`claude-uninstall`。
 - `cc_setup_win.ps1`: Windows PowerShell 安装 Claude 环境、RTK，并写入对应命令。
 - `dworkers_setup.sh`: 克隆/更新 `ictrektech/digital-workers`，重装 skills，生成 `.env` 和示例任务。
