@@ -6,36 +6,20 @@ Claude / RTK / skills / digital-workers 的一键安装脚本集合。
 
 ### macOS / Linux
 
-先下载脚本：
-
 ```bash
-SCRIPT=/tmp/cc_setup_unix.sh
-URL=https://raw.githubusercontent.com/huluxiaohuowa/cc_setup/main/cc_setup_unix.sh
-FAST_URL=https://ghfast.top/https://raw.githubusercontent.com/huluxiaohuowa/cc_setup/main/cc_setup_unix.sh
-curl -LfsS "$URL" -o "$SCRIPT" || curl -LfsS "$FAST_URL" -o "$SCRIPT"
+wget -P /tmp -N --no-check-certificate "https://raw.githubusercontent.com/huluxiaohuowa/cc_setup/main/cc_setup_unix.sh" && chmod 700 /tmp/cc_setup_unix.sh && /tmp/cc_setup_unix.sh
 ```
 
-再执行脚本：
+如果 GitHub 直连失败，使用 ghfast：
 
 ```bash
-bash "$SCRIPT"
+wget -P /tmp -N --no-check-certificate "https://ghfast.top/https://raw.githubusercontent.com/huluxiaohuowa/cc_setup/main/cc_setup_unix.sh" && chmod 700 /tmp/cc_setup_unix.sh && /tmp/cc_setup_unix.sh
 ```
 
 fish shell 可以执行：
 
-先下载脚本：
-
 ```fish
-set SCRIPT /tmp/cc_setup_unix.sh
-set URL https://raw.githubusercontent.com/huluxiaohuowa/cc_setup/main/cc_setup_unix.sh
-set FAST_URL https://ghfast.top/https://raw.githubusercontent.com/huluxiaohuowa/cc_setup/main/cc_setup_unix.sh
-curl -LfsS "$URL" -o "$SCRIPT"; or curl -LfsS "$FAST_URL" -o "$SCRIPT"
-```
-
-再执行脚本：
-
-```fish
-bash "$SCRIPT"
+bash -lc 'wget -P /tmp -N --no-check-certificate "https://raw.githubusercontent.com/huluxiaohuowa/cc_setup/main/cc_setup_unix.sh" && chmod 700 /tmp/cc_setup_unix.sh && /tmp/cc_setup_unix.sh'
 ```
 
 ### Windows
@@ -74,53 +58,26 @@ claude-uninstall
 
 安装并更新 digital-workers，同时重新安装仓库里的 skills 到 `~/.claude/skills`：
 
-先下载脚本：
-
 ```bash
-SCRIPT=/tmp/dworkers_setup.sh
-URL=https://raw.githubusercontent.com/huluxiaohuowa/cc_setup/main/dworkers_setup.sh
-FAST_URL=https://ghfast.top/https://raw.githubusercontent.com/huluxiaohuowa/cc_setup/main/dworkers_setup.sh
-curl -LfsS "$URL" -o "$SCRIPT" || curl -LfsS "$FAST_URL" -o "$SCRIPT"
+wget -P /tmp -N --no-check-certificate "https://raw.githubusercontent.com/huluxiaohuowa/cc_setup/main/dworkers_setup.sh" && chmod 700 /tmp/dworkers_setup.sh && /tmp/dworkers_setup.sh
 ```
 
-再执行脚本：
+如果 GitHub 直连失败，使用 ghfast：
 
 ```bash
-bash "$SCRIPT"
+wget -P /tmp -N --no-check-certificate "https://ghfast.top/https://raw.githubusercontent.com/huluxiaohuowa/cc_setup/main/dworkers_setup.sh" && chmod 700 /tmp/dworkers_setup.sh && /tmp/dworkers_setup.sh
 ```
 
 指定项目目录：
 
-先下载脚本：
-
 ```bash
-SCRIPT=/tmp/dworkers_setup.sh
-URL=https://raw.githubusercontent.com/huluxiaohuowa/cc_setup/main/dworkers_setup.sh
-FAST_URL=https://ghfast.top/https://raw.githubusercontent.com/huluxiaohuowa/cc_setup/main/dworkers_setup.sh
-curl -LfsS "$URL" -o "$SCRIPT" || curl -LfsS "$FAST_URL" -o "$SCRIPT"
-```
-
-再执行脚本：
-
-```bash
-bash "$SCRIPT" ~/projects/demo
+wget -P /tmp -N --no-check-certificate "https://raw.githubusercontent.com/huluxiaohuowa/cc_setup/main/dworkers_setup.sh" && chmod 700 /tmp/dworkers_setup.sh && /tmp/dworkers_setup.sh ~/projects/demo
 ```
 
 如果 Claude 命令不在 PATH 中，可以指定：
 
-先下载脚本：
-
 ```bash
-SCRIPT=/tmp/dworkers_setup.sh
-URL=https://raw.githubusercontent.com/huluxiaohuowa/cc_setup/main/dworkers_setup.sh
-FAST_URL=https://ghfast.top/https://raw.githubusercontent.com/huluxiaohuowa/cc_setup/main/dworkers_setup.sh
-curl -LfsS "$URL" -o "$SCRIPT" || curl -LfsS "$FAST_URL" -o "$SCRIPT"
-```
-
-再执行脚本：
-
-```bash
-CLAUDE_BIN=claude-haha bash "$SCRIPT"
+wget -P /tmp -N --no-check-certificate "https://raw.githubusercontent.com/huluxiaohuowa/cc_setup/main/dworkers_setup.sh" && chmod 700 /tmp/dworkers_setup.sh && CLAUDE_BIN=claude-haha /tmp/dworkers_setup.sh
 ```
 
 安装完成后，脚本会输出项目目录，并生成示例任务。进入项目目录运行：
