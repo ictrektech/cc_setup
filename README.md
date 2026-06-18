@@ -22,7 +22,7 @@ fish shell 可以执行：
 bash -lc 'bash <(curl -LfsS https://raw.githubusercontent.com/huluxiaohuowa/cc_setup/main/cc_switch_setup.sh || curl -LfsS https://ghfast.top/https://raw.githubusercontent.com/huluxiaohuowa/cc_setup/main/cc_switch_setup.sh)'
 ```
 
-配置内容：
+以上的安装过程会写入如下配置内容：
 
 ```text
 API 地址: https://ai.ictrek.com
@@ -32,11 +32,19 @@ Sonnet/Opus/默认模型: volces/GLM-5.1
 Provider ID: ictrek
 ```
 
-安装时直接写入自己的 API Key：
+**十分建议**安装时直接写入自己的 API Key：
 
 ```bash
 CC_SWITCH_API_KEY="你的 API Key" bash <(curl -LfsS https://raw.githubusercontent.com/huluxiaohuowa/cc_setup/main/cc_switch_setup.sh || curl -LfsS https://ghfast.top/https://raw.githubusercontent.com/huluxiaohuowa/cc_setup/main/cc_switch_setup.sh)
 ```
+
+如果还希望方案一自动安装并初始化 RTK：
+
+```bash
+CC_SWITCH_API_KEY="你的 API Key" CC_SWITCH_INSTALL_RTK=1 bash <(curl -LfsS https://raw.githubusercontent.com/huluxiaohuowa/cc_setup/main/cc_switch_setup.sh || curl -LfsS https://ghfast.top/https://raw.githubusercontent.com/huluxiaohuowa/cc_setup/main/cc_switch_setup.sh)
+```
+
+`CC_SWITCH_INSTALL_RTK=1` 会安装/修复 `rtk` 到 `~/.local/bin`，并自动执行 `rtk init -g`。
 
 已经安装过后，可以用一条命令把 `dummy-keys` 改成自己的 key：
 

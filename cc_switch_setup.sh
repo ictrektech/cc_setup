@@ -7,6 +7,11 @@ SELF_SCRIPT_URL="https://raw.githubusercontent.com/huluxiaohuowa/cc_setup/main/c
 SELF_SCRIPT_URL_FAST="https://ghfast.top/${SELF_SCRIPT_URL}"
 GHFAST_PREFIX="${GHFAST_PREFIX:-https://ghfast.top/}"
 GHFAST_PREFIX="${GHFAST_PREFIX%/}/"
+RTK_INSTALL_URLS=(
+  "https://raw.githubusercontent.com/rtk-ai/rtk/master/install.sh"
+  "https://raw.githubusercontent.com/rtk-ai/rtk/main/install.sh"
+)
+RTK_BIN_DIR="$HOME/.local/bin"
 
 PROVIDER_ID="ictrek"
 PROVIDER_NAME="ICTrek"
@@ -14,6 +19,7 @@ API_BASE_URL="https://ai.ictrek.com"
 API_KEY="${CC_SWITCH_API_KEY:-${API_KEY:-dummy-keys}}"
 HAIKU_MODEL="volces/DeepSeek-V4-Flash"
 DEFAULT_MODEL="volces/GLM-5.1"
+INSTALL_RTK="${CC_SWITCH_INSTALL_RTK:-${INSTALL_RTK:-0}}"
 
 OS_TYPE="linux"
 if [ "$(uname -s)" = "Darwin" ]; then
@@ -49,7 +55,7 @@ download_nonempty() {
   return 1
 }
 
-rewrite_github_urls_to_ghfast() {
+patch_download_asset_fallback_to_ghfast() {
   local file="$1"
 
   GHFAST_PREFIX="$GHFAST_PREFIX" python3 - "$file" <<'PY'
@@ -61,8 +67,59 @@ path = Path(sys.argv[1])
 prefix = os.environ["GHFAST_PREFIX"]
 content = path.read_text(encoding="utf-8")
 
-for url in ("https://github.com", "https://api.github.com", "https://raw.githubusercontent.com"):
-    content = content.replace(url, prefix + url)
+old = '''download_asset() {
+  local url="$1"
+  local dest="$2"
+
+  if command -v curl >/dev/null 2>&1; then
+    curl --fail --location --silent --show-error --output "${dest}" "${url}"
+  elif command -v wget >/dev/null 2>&1; then
+    wget --quiet --output-document="${dest}" "${url}"
+  else
+    err "Neither curl nor wget found. Please install one and retry."
+    exit 1
+  fi
+}
+'''
+
+new = '''download_asset() {
+  local url="$1"
+  local dest="$2"
+  local fast_url=""
+
+  case "${url}" in
+    https://github.com/*|https://api.github.com/*|https://raw.githubusercontent.com/*)
+      fast_url="''' + prefix + '''${url}"
+      ;;
+  esac
+
+  if command -v curl >/dev/null 2>&1; then
+    if curl --fail --location --silent --show-error --output "${dest}" "${url}"; then
+      return 0
+    fi
+    if [ -n "${fast_url}" ]; then
+      warn "GitHub download failed, retrying with mirror: ${fast_url}"
+      curl --fail --location --silent --show-error --output "${dest}" "${fast_url}" && return 0
+    fi
+    return 1
+  elif command -v wget >/dev/null 2>&1; then
+    if wget --quiet --output-document="${dest}" "${url}"; then
+      return 0
+    fi
+    if [ -n "${fast_url}" ]; then
+      warn "GitHub download failed, retrying with mirror: ${fast_url}"
+      wget --quiet --output-document="${dest}" "${fast_url}" && return 0
+    fi
+    return 1
+  else
+    err "Neither curl nor wget found. Please install one and retry."
+    exit 1
+  fi
+}
+'''
+
+if old in content and "GitHub download failed, retrying with mirror" not in content:
+    content = content.replace(old, new)
 
 path.write_text(content, encoding="utf-8")
 PY
@@ -206,6 +263,67 @@ install_node_from_tarball() {
   rm -rf "$tmp"
 
   export PATH="$HOME/.local/node/bin:$PATH"
+}
+
+download_rtk_install() {
+  local output="$1"
+  local url
+
+  for url in "${RTK_INSTALL_URLS[@]}"; do
+    if download_nonempty "$url" "${GHFAST_PREFIX}${url}" "$output"; then
+      return 0
+    fi
+    warn "RTK install.sh 下载失败，尝试下一个分支。"
+  done
+
+  return 1
+}
+
+ensure_rtk() {
+  mkdir -p "$RTK_BIN_DIR"
+  export PATH="$RTK_BIN_DIR:$PATH"
+
+  local ok=0
+  if command -v rtk >/dev/null 2>&1 && rtk --version >/dev/null 2>&1; then
+    ok=1
+  fi
+
+  if [ "$ok" -ne 1 ]; then
+    log "安装/修复 RTK 到：$RTK_BIN_DIR"
+    local tmp
+    tmp="$(mktemp)"
+    if ! download_rtk_install "$tmp"; then
+      rm -f "$tmp"
+      err "RTK install.sh 下载失败。"
+      exit 1
+    fi
+    RTK_INSTALL_DIR="$RTK_BIN_DIR" RTK_BIN_DIR="$RTK_BIN_DIR" bash "$tmp" || true
+    rm -f "$tmp"
+  fi
+
+  if ! command -v rtk >/dev/null 2>&1; then
+    err "RTK 安装后仍不可用，请检查 $RTK_BIN_DIR 是否在 PATH 中。"
+    exit 1
+  fi
+
+  if ! rtk --version >/dev/null 2>&1; then
+    err "rtk --version 执行失败，重新安装后仍不可用。"
+    exit 1
+  fi
+
+  rtk --version || true
+  printf 'y\n' | rtk init -g || warn "rtk init -g 执行失败，但 rtk 已安装。"
+}
+
+maybe_install_rtk() {
+  case "${INSTALL_RTK}" in
+    1|true|TRUE|yes|YES|y|Y|on|ON)
+      ensure_rtk
+      ;;
+    *)
+      log "跳过 RTK 自动安装。如需安装，请使用：CC_SWITCH_INSTALL_RTK=1"
+      ;;
+  esac
 }
 
 install_with_apt() {
@@ -405,9 +523,11 @@ install_cc_switch_if_needed() {
     exit 1
   fi
 
+  patch_download_asset_fallback_to_ghfast "$tmp"
+
   if ! CC_SWITCH_FORCE=1 bash "$tmp"; then
-    warn "cc-switch-cli 直连 GitHub 安装失败，改用 ghfast.top 加速后重试。"
-    rewrite_github_urls_to_ghfast "$tmp"
+    warn "cc-switch-cli 安装失败，重新注入 GitHub 下载失败时的镜像重试逻辑后再试一次。"
+    patch_download_asset_fallback_to_ghfast "$tmp"
     CC_SWITCH_FORCE=1 bash "$tmp"
   fi
   rm -f "$tmp"
@@ -954,6 +1074,7 @@ PY
 main() {
   install_basic_tools_if_needed
   ensure_local_bin_in_path
+  maybe_install_rtk
   ensure_node_npm
   uninstall_cc_haha_if_needed
   install_claude_code_if_needed
