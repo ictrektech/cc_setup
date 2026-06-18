@@ -7,19 +7,13 @@ Claude / RTK / skills / digital-workers 的一键安装脚本集合。
 ### macOS / Linux
 
 ```bash
-wget -P /tmp -N --no-check-certificate "https://raw.githubusercontent.com/huluxiaohuowa/cc_setup/main/cc_setup_unix.sh" && chmod 700 /tmp/cc_setup_unix.sh && /tmp/cc_setup_unix.sh
-```
-
-如果 GitHub 直连失败，使用 ghfast：
-
-```bash
-wget -P /tmp -N --no-check-certificate "https://ghfast.top/https://raw.githubusercontent.com/huluxiaohuowa/cc_setup/main/cc_setup_unix.sh" && chmod 700 /tmp/cc_setup_unix.sh && /tmp/cc_setup_unix.sh
+bash <(curl -LfsS https://raw.githubusercontent.com/huluxiaohuowa/cc_setup/main/cc_setup_unix.sh || curl -LfsS https://ghfast.top/https://raw.githubusercontent.com/huluxiaohuowa/cc_setup/main/cc_setup_unix.sh)
 ```
 
 fish shell 可以执行：
 
 ```fish
-bash -lc 'wget -P /tmp -N --no-check-certificate "https://raw.githubusercontent.com/huluxiaohuowa/cc_setup/main/cc_setup_unix.sh" && chmod 700 /tmp/cc_setup_unix.sh && /tmp/cc_setup_unix.sh'
+bash -lc 'bash <(curl -LfsS https://raw.githubusercontent.com/huluxiaohuowa/cc_setup/main/cc_setup_unix.sh || curl -LfsS https://ghfast.top/https://raw.githubusercontent.com/huluxiaohuowa/cc_setup/main/cc_setup_unix.sh)'
 ```
 
 ### Windows
@@ -59,25 +53,19 @@ claude-uninstall
 安装并更新 digital-workers，同时重新安装仓库里的 skills 到 `~/.claude/skills`：
 
 ```bash
-wget -P /tmp -N --no-check-certificate "https://raw.githubusercontent.com/huluxiaohuowa/cc_setup/main/dworkers_setup.sh" && chmod 700 /tmp/dworkers_setup.sh && /tmp/dworkers_setup.sh
-```
-
-如果 GitHub 直连失败，使用 ghfast：
-
-```bash
-wget -P /tmp -N --no-check-certificate "https://ghfast.top/https://raw.githubusercontent.com/huluxiaohuowa/cc_setup/main/dworkers_setup.sh" && chmod 700 /tmp/dworkers_setup.sh && /tmp/dworkers_setup.sh
+bash <(curl -LfsS https://raw.githubusercontent.com/huluxiaohuowa/cc_setup/main/dworkers_setup.sh || curl -LfsS https://ghfast.top/https://raw.githubusercontent.com/huluxiaohuowa/cc_setup/main/dworkers_setup.sh)
 ```
 
 指定项目目录：
 
 ```bash
-wget -P /tmp -N --no-check-certificate "https://raw.githubusercontent.com/huluxiaohuowa/cc_setup/main/dworkers_setup.sh" && chmod 700 /tmp/dworkers_setup.sh && /tmp/dworkers_setup.sh ~/projects/demo
+bash <(curl -LfsS https://raw.githubusercontent.com/huluxiaohuowa/cc_setup/main/dworkers_setup.sh || curl -LfsS https://ghfast.top/https://raw.githubusercontent.com/huluxiaohuowa/cc_setup/main/dworkers_setup.sh) ~/projects/demo
 ```
 
 如果 Claude 命令不在 PATH 中，可以指定：
 
 ```bash
-wget -P /tmp -N --no-check-certificate "https://raw.githubusercontent.com/huluxiaohuowa/cc_setup/main/dworkers_setup.sh" && chmod 700 /tmp/dworkers_setup.sh && CLAUDE_BIN=claude-haha /tmp/dworkers_setup.sh
+CLAUDE_BIN=claude-haha bash <(curl -LfsS https://raw.githubusercontent.com/huluxiaohuowa/cc_setup/main/dworkers_setup.sh || curl -LfsS https://ghfast.top/https://raw.githubusercontent.com/huluxiaohuowa/cc_setup/main/dworkers_setup.sh)
 ```
 
 安装完成后，脚本会输出项目目录，并生成示例任务。进入项目目录运行：
