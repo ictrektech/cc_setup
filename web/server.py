@@ -25,6 +25,239 @@ sessions = {}
 sessions_lock = threading.RLock()
 
 
+def run_cmd(args, cwd, timeout=20, check=False):
+    proc = subprocess.run(
+        args,
+        cwd=cwd,
+        stdin=subprocess.DEVNULL,
+        stdout=subprocess.PIPE,
+        stderr=subprocess.STDOUT,
+        text=True,
+        timeout=timeout,
+        check=False,
+    )
+    if check and proc.returncode != 0:
+        raise RuntimeError(proc.stdout.strip() or f"{args[0]} exited with {proc.returncode}")
+    return proc.returncode, proc.stdout
+
+
+def git_cmd(cwd, *args, timeout=20, check=False):
+    return run_cmd(["git", *args], cwd, timeout=timeout, check=check)
+
+
+def split_lines(text):
+    return [line for line in text.splitlines() if line.strip()]
+
+
+IGNORE_DIRS = {".git", "node_modules", ".venv", "venv", "__pycache__", "dist", "build", ".next", ".cache"}
+TEXT_SUFFIXES = {
+    ".c", ".cc", ".cfg", ".conf", ".cpp", ".css", ".csv", ".env", ".go", ".h", ".hpp", ".html", ".ini",
+    ".java", ".js", ".json", ".jsx", ".md", ".mjs", ".py", ".rb", ".rs", ".sh", ".sql", ".svg", ".toml",
+    ".ts", ".tsx", ".txt", ".vue", ".xml", ".yaml", ".yml",
+}
+
+
+def ensure_git_repo(cwd):
+    code, root = git_cmd(cwd, "rev-parse", "--show-toplevel")
+    if code != 0:
+        raise RuntimeError("当前目录不是 git 仓库。")
+    return root.strip()
+
+
+def git_summary(cwd):
+    repo = ensure_git_repo(cwd)
+    _, branch = git_cmd(repo, "branch", "--show-current")
+    _, head = git_cmd(repo, "rev-parse", "--short", "HEAD")
+    upstream_code, upstream = git_cmd(repo, "rev-parse", "--abbrev-ref", "--symbolic-full-name", "@{u}")
+    _, porcelain = git_cmd(repo, "status", "--porcelain=v1", "-b")
+    _, remotes = git_cmd(repo, "remote", "-v")
+    _, log = git_cmd(repo, "log", "--oneline", "--decorate", "-n", "8")
+    _, graph = git_cmd(repo, "log", "--graph", "--decorate", "--oneline", "--all", "-n", "32")
+    commits = git_commits(repo)
+
+    files = []
+    for line in porcelain.splitlines():
+        if line.startswith("## "):
+            continue
+        if not line:
+            continue
+        files.append({"index": line[:1], "worktree": line[1:2], "path": line[3:]})
+
+    ahead = behind = 0
+    upstream_name = upstream.strip() if upstream_code == 0 else ""
+    if upstream_name:
+        code, counts = git_cmd(repo, "rev-list", "--left-right", "--count", f"{upstream_name}...HEAD")
+        if code == 0:
+            parts = counts.split()
+            if len(parts) == 2:
+                behind, ahead = int(parts[0]), int(parts[1])
+
+    return {
+        "ok": True,
+        "repo": repo,
+        "branch": branch.strip() or "(detached)",
+        "head": head.strip(),
+        "upstream": upstream_name,
+        "ahead": ahead,
+        "behind": behind,
+        "files": files,
+        "remotes": split_lines(remotes),
+        "log": split_lines(log),
+        "graph": split_lines(graph),
+        "commits": commits,
+        "clean": len(files) == 0,
+    }
+
+
+def git_commits(repo, limit=80):
+    _, output = git_cmd(
+        repo,
+        "log",
+        "--all",
+        "--date-order",
+        f"-n{limit}",
+        "--pretty=format:%H%x1f%h%x1f%D%x1f%s%x1f%P%x1e",
+        timeout=30,
+    )
+    commits = []
+    for record in output.split("\x1e"):
+        record = record.strip()
+        if not record:
+            continue
+        parts = record.split("\x1f")
+        if len(parts) < 5:
+            continue
+        commits.append({
+            "hash": parts[0],
+            "short": parts[1],
+            "refs": parts[2],
+            "subject": parts[3],
+            "parents": [item for item in parts[4].split() if item],
+        })
+    return commits
+
+
+def git_diff(cwd, path=None, staged=False):
+    repo = ensure_git_repo(cwd)
+    if path and not staged:
+        _, status = git_cmd(repo, "status", "--porcelain=v1", "--", path)
+        if status.startswith("??"):
+            _, output = git_cmd(repo, "diff", "--no-index", "--", "/dev/null", str(Path(repo) / path), timeout=30)
+            return {"repo": repo, "diff": output}
+    args = ["diff"]
+    if staged:
+        args.append("--cached")
+    args.extend(["--"])
+    if path:
+        args.append(path)
+    _, output = git_cmd(repo, *args, timeout=30)
+    return {"repo": repo, "diff": output}
+
+
+def safe_child(root, relative):
+    root_path = Path(root).resolve()
+    target = (root_path / str(relative or "")).resolve()
+    if target != root_path and root_path not in target.parents:
+        raise RuntimeError("路径超出当前项目目录。")
+    return target
+
+
+def is_probably_text(path):
+    if path.suffix.lower() in TEXT_SUFFIXES:
+        return True
+    try:
+        sample = path.read_bytes()[:2048]
+    except OSError:
+        return False
+    return b"\x00" not in sample
+
+
+def file_tree(cwd, limit=500):
+    root = Path(normalize_cwd(cwd)).resolve()
+    if not root.exists() or not root.is_dir():
+        raise RuntimeError("项目目录不存在。")
+    items = []
+    for current, dirs, files in os.walk(root):
+        rel_dir = Path(current).relative_to(root)
+        dirs[:] = sorted([name for name in dirs if name not in IGNORE_DIRS and not name.startswith(".")])
+        depth = 0 if str(rel_dir) == "." else len(rel_dir.parts)
+        if depth > 5:
+            dirs[:] = []
+            continue
+        for name in sorted(files):
+            if name.startswith("."):
+                continue
+            path = Path(current) / name
+            try:
+                stat = path.stat()
+            except OSError:
+                continue
+            if stat.st_size > 1024 * 1024:
+                continue
+            rel = path.relative_to(root).as_posix()
+            items.append({
+                "path": rel,
+                "name": name,
+                "size": stat.st_size,
+                "language": language_for(path),
+                "editable": is_probably_text(path),
+            })
+            if len(items) >= limit:
+                return {"root": str(root), "files": items, "truncated": True}
+    return {"root": str(root), "files": items, "truncated": False}
+
+
+def read_file(cwd, relative):
+    root = Path(normalize_cwd(cwd)).resolve()
+    target = safe_child(root, relative)
+    if not target.exists() or not target.is_file():
+        raise RuntimeError("文件不存在。")
+    if target.stat().st_size > 1024 * 1024:
+        raise RuntimeError("文件超过 1MB，暂不在 Web 编辑器中打开。")
+    if not is_probably_text(target):
+        raise RuntimeError("当前文件看起来不是文本文件。")
+    return {
+        "path": target.relative_to(root).as_posix(),
+        "content": target.read_text(encoding="utf-8", errors="replace"),
+        "language": language_for(target),
+    }
+
+
+def write_file(cwd, relative, content):
+    root = Path(normalize_cwd(cwd)).resolve()
+    target = safe_child(root, relative)
+    if not target.exists() or not target.is_file():
+        raise RuntimeError("文件不存在。")
+    text = str(content)
+    if len(text.encode("utf-8")) > 1024 * 1024:
+        raise RuntimeError("文件超过 1MB，暂不保存。")
+    target.write_text(text, encoding="utf-8")
+    return {"ok": True, "path": target.relative_to(root).as_posix(), "language": language_for(target)}
+
+
+def language_for(path):
+    suffix = path.suffix.lower()
+    return {
+        ".py": "python",
+        ".js": "javascript",
+        ".mjs": "javascript",
+        ".jsx": "javascript",
+        ".ts": "typescript",
+        ".tsx": "typescript",
+        ".json": "json",
+        ".css": "css",
+        ".html": "html",
+        ".md": "markdown",
+        ".sh": "shell",
+        ".yml": "yaml",
+        ".yaml": "yaml",
+        ".toml": "toml",
+        ".rs": "rust",
+        ".go": "go",
+        ".java": "java",
+    }.get(suffix, "text")
+
+
 def resolve_command():
     candidates = [os.environ.get("CLAUDE_BIN"), "claude"]
     for candidate in [item for item in candidates if item]:
@@ -113,7 +346,9 @@ class Session:
         self.proc = None
         self.worker_proc = None
         self.busy = False
-        self.add_event("system", "房间已就绪。发送任务后会以 claude -p 运行，并在这里显示结构化回答。")
+        self.prompt_queue = deque()
+        self.provider_session_id = None
+        self.add_event("system", "房间已就绪。Claude 将以结构化 Agent 模式运行，工具调用、执行状态和回答会分开显示。")
         if args:
             self.start_pty(args, cols, rows)
 
@@ -127,6 +362,9 @@ class Session:
             "createdAt": self.created_at,
             "lastOutputAt": self.last_output_at,
             "exitCode": self.exit_code,
+            "busy": self.busy,
+            "queueLength": len(self.prompt_queue),
+            "providerSessionId": self.provider_session_id,
             "buffer": list(self.buffer)[-300:],
             "events": list(self.events)[-300:],
         }
@@ -142,11 +380,31 @@ class Session:
         self.events.append(event)
         self.broadcast({"type": "event", "event": event})
 
+    def broadcast_session(self):
+        self.broadcast({"type": "session_update", "session": self.serialize()})
+
     def write(self, data, record_user=False):
         if self.status == "running" and self.master_fd is not None:
             if record_user and data.strip():
                 self.add_event("user", data.strip())
             os.write(self.master_fd, data.encode("utf-8", errors="replace"))
+
+    def send_pty_message(self, text):
+        text = str(text or "").strip()
+        if not text:
+            return
+        self.add_event("user", text)
+        self.write(text + "\r")
+
+    def send_initial_pty_prompt(self, prompt):
+        def worker():
+            time.sleep(1.0)
+            # Safe no-op when the trust prompt is absent; confirms it when present.
+            self.write("\r")
+            time.sleep(0.8)
+            self.send_pty_message(prompt)
+
+        threading.Thread(target=worker, daemon=True).start()
 
     def resize(self, cols, rows):
         if self.master_fd is not None:
@@ -186,56 +444,125 @@ class Session:
         threading.Thread(target=self._read_loop, daemon=True).start()
         threading.Thread(target=self._wait_loop, daemon=True).start()
 
+    def enqueue_prompt(self, prompt):
+        prompt = prompt.strip()
+        if not prompt:
+            return
+        if self.master_fd is not None:
+            self.send_pty_message(prompt)
+            return
+        if self.busy:
+            self.prompt_queue.append(prompt)
+            self.add_event("user", prompt)
+            self.add_status(f"Claude 正在处理上一条消息，已排队 {len(self.prompt_queue)} 条。")
+            self.broadcast_session()
+            return
+        self.add_event("user", prompt)
+        threading.Thread(target=self.run_prompt, args=(prompt,), daemon=True).start()
+
     def run_prompt(self, prompt):
         prompt = prompt.strip()
         if not prompt:
             return
-        if self.busy:
-            self.add_event("system", "Claude 正在处理上一条任务，请稍后再发送。")
-            return
 
         self.busy = True
-        self.add_event("user", prompt)
-        self.add_status("Claude 正在启动任务...")
+        self.broadcast_session()
+        self.add_status("Claude 正在启动...")
+        payload = {
+            "cwd": self.cwd,
+            "command": self.command,
+            "prompt": prompt,
+            "providerSessionId": self.provider_session_id,
+            "permissionMode": os.environ.get("CLAUDE_PERMISSION_MODE", "acceptEdits"),
+            "maxTurns": int(os.environ.get("CLAUDE_MAX_TURNS", "12")),
+            "timeoutSeconds": int(os.environ.get("CLAUDE_RUN_TIMEOUT", "180")),
+        }
 
         try:
+            command_args = [
+                self.command,
+                "-p",
+                "--permission-mode",
+                payload["permissionMode"],
+                "--max-turns",
+                str(payload["maxTurns"]),
+                "--verbose",
+                "--output-format",
+                "stream-json",
+            ]
+            if self.provider_session_id:
+                command_args.extend(["--resume", self.provider_session_id])
+            command_args.append(prompt)
             self.worker_proc = subprocess.Popen(
-                [self.command, "-p", "--verbose", "--output-format", "stream-json", "--include-partial-messages", prompt],
+                command_args,
                 cwd=self.cwd,
                 stdin=subprocess.DEVNULL,
                 stdout=subprocess.PIPE,
                 stderr=subprocess.STDOUT,
                 text=True,
                 bufsize=1,
-                env={**os.environ, "TERM": "dumb"},
+                env={**os.environ, "TERM": "dumb", "NO_COLOR": "1"},
                 preexec_fn=os.setsid if hasattr(os, "setsid") else None,
             )
+            timed_out = False
+
+            def kill_on_timeout():
+                nonlocal timed_out
+                if self.worker_proc and self.worker_proc.poll() is None:
+                    timed_out = True
+                    self.add_event("system", f"Claude 运行超过 {payload['timeoutSeconds']} 秒，已自动停止。")
+                    try:
+                        os.killpg(os.getpgid(self.worker_proc.pid), signal.SIGTERM)
+                    except Exception:
+                        self.worker_proc.terminate()
+
+            timer = threading.Timer(payload["timeoutSeconds"], kill_on_timeout)
+            timer.daemon = True
+            timer.start()
             seen = set()
             active_stream_id = None
             streamed_text = ""
-            self.add_status("等待 Claude 首字返回...")
+            has_result = False
+            raw_tail = deque(maxlen=8)
+            self.add_status("等待 Claude 响应...")
             for line in self.worker_proc.stdout or []:
                 self.last_output_at = iso_now()
                 self.buffer.append(line)
+                raw_tail.append(line.strip())
                 self.broadcast({"type": "output", "data": line})
                 try:
                     event = json.loads(line)
                 except json.JSONDecodeError:
                     continue
-                if event.get("type") == "system" and event.get("subtype") == "status":
-                    if event.get("status") == "requesting":
+                message_event = event
+                if message_event.get("session_id") and not self.provider_session_id:
+                    self.provider_session_id = message_event.get("session_id")
+                    self.broadcast_session()
+                    self.add_status("Claude 会话已建立。")
+                if message_event.get("type") == "system":
+                    if message_event.get("subtype") == "init":
+                        tools = message_event.get("tools") or []
+                        self.add_status(f"Claude 已启动，工具 {len(tools)} 个。")
+                    elif message_event.get("subtype") == "status" and message_event.get("status") == "requesting":
                         self.add_status("Claude 已收到任务，正在请求模型...")
+                    elif message_event.get("subtype") == "api_retry":
+                        self.add_status("模型限流，Claude 正在自动重试...")
                     continue
-                if event.get("type") == "stream_event":
-                    stream_event = event.get("event") or {}
+                if message_event.get("type") == "stream_event":
+                    stream_event = message_event.get("event") or {}
                     stream_type = stream_event.get("type")
                     if stream_type == "content_block_start":
-                        active_stream_id = str(uuid.uuid4())
-                        streamed_text = ""
-                        self.broadcast({"type": "assistant_start", "streamId": active_stream_id})
+                        block = stream_event.get("content_block") or {}
+                        if block.get("type") == "text":
+                            active_stream_id = str(uuid.uuid4())
+                            streamed_text = ""
+                            self.broadcast({"type": "assistant_start", "streamId": active_stream_id})
+                        elif block.get("type") == "tool_use":
+                            name = block.get("name") or "tool"
+                            self.add_status(f"Claude 正在调用工具：{name}")
                     elif stream_type == "content_block_delta":
                         delta = stream_event.get("delta") or {}
-                        text_delta = delta.get("text", "")
+                        text_delta = delta.get("text", "") or delta.get("text_delta", "")
                         if active_stream_id and text_delta:
                             streamed_text += text_delta
                             self.broadcast({"type": "assistant_delta", "streamId": active_stream_id, "text": text_delta})
@@ -244,31 +571,58 @@ class Session:
                             self.broadcast({"type": "assistant_done", "streamId": active_stream_id})
                             active_stream_id = None
                     continue
-                if event.get("type") == "assistant":
-                    message = event.get("message") or {}
+                if message_event.get("type") == "assistant":
+                    message = message_event.get("message") or {}
                     for block in message.get("content") or []:
                         if block.get("type") == "text":
                             text = block.get("text", "").strip()
-                            if text and text not in seen:
+                            if text and not streamed_text and text not in seen:
                                 seen.add(text)
-                                if streamed_text:
-                                    self.add_event("assistant", text, broadcast=False)
-                                    self.broadcast({"type": "assistant_replace", "text": text})
-                                else:
-                                    self.add_event("assistant", text)
-                elif event.get("type") == "result" and event.get("is_error"):
-                    self.add_event("system", event.get("result") or "Claude 执行失败。")
+                                self.add_event("assistant", text, broadcast=False)
+                                self.broadcast({"type": "assistant_start", "streamId": str(uuid.uuid4())})
+                                self.broadcast({"type": "assistant_replace", "text": text})
+                        elif block.get("type") == "tool_use":
+                            self.add_status(f"Claude 正在调用工具：{block.get('name') or 'tool'}")
+                elif message_event.get("type") == "user":
+                    result = message_event.get("tool_use_result")
+                    if result is not None:
+                        name = result.get("name") if isinstance(result, dict) else ""
+                        self.add_status(f"{name or '工具'}结果已返回，等待 Claude 继续...")
+                elif message_event.get("type") == "result":
+                    result_text = str(message_event.get("result") or "").strip()
+                    if message_event.get("is_error"):
+                        self.add_event("system", result_text or "Claude 执行失败。")
+                    elif result_text:
+                        has_result = True
+                        if result_text not in seen:
+                            seen.add(result_text)
+                            if streamed_text:
+                                self.add_event("assistant", result_text, broadcast=False)
+                                self.broadcast({"type": "assistant_replace", "text": result_text})
+                            else:
+                                self.add_event("assistant", result_text)
 
             code = self.worker_proc.wait()
-            if code != 0:
-                self.add_event("system", f"Claude 进程退出码：{code}")
-            else:
+            timer.cancel()
+            if code != 0 and not timed_out:
+                detail = next((line for line in reversed(raw_tail) if line), "")
+                suffix = f"\n{detail}" if detail else ""
+                self.add_event("system", f"Claude 进程退出码：{code}{suffix}")
+            elif code == 0:
+                if not has_result:
+                    self.add_event("system", "Claude 本轮没有返回最终结果，可能仍停在工具调用中。")
                 self.add_status("完成。")
         except Exception as exc:
             self.add_event("system", f"Claude 启动失败：{exc}")
         finally:
             self.worker_proc = None
             self.busy = False
+            self.broadcast_session()
+            if self.status == "running" and self.prompt_queue:
+                next_prompt = self.prompt_queue.popleft()
+                self.add_status(f"继续处理队列中的下一条消息，剩余 {len(self.prompt_queue)} 条。")
+                self.broadcast_session()
+                threading.Thread(target=self.run_prompt, args=(next_prompt,), daemon=True).start()
 
 
     def broadcast(self, payload):
@@ -357,6 +711,10 @@ class Handler(http.server.SimpleHTTPRequestHandler):
             with sessions_lock:
                 data = [session.serialize() for session in sessions.values()]
             return json_response(self, 200, data)
+        if parsed.path == "/api/git":
+            return self.git_get(parsed)
+        if parsed.path == "/api/files":
+            return self.files_get(parsed)
         if parsed.path == "/ws":
             return self.handle_ws(parsed)
         return self.serve_static(parsed.path)
@@ -365,6 +723,10 @@ class Handler(http.server.SimpleHTTPRequestHandler):
         parsed = urlparse(self.path)
         if parsed.path == "/api/sessions":
             return self.create_session()
+        if parsed.path.startswith("/api/git/"):
+            return self.git_post(parsed)
+        if parsed.path == "/api/files":
+            return self.files_post(parsed)
         if parsed.path.startswith("/api/sessions/") and parsed.path.endswith("/input"):
             session_id = parsed.path.split("/")[3]
             body = read_json(self)
@@ -374,6 +736,18 @@ class Handler(http.server.SimpleHTTPRequestHandler):
                 return json_response(self, 404, {"error": "会话不存在"})
             session.write(str(body.get("data", "")), bool(body.get("recordUser")))
             return json_response(self, 200, {"ok": True})
+        if parsed.path.startswith("/api/sessions/") and parsed.path.endswith("/message"):
+            session_id = parsed.path.split("/")[3]
+            body = read_json(self)
+            with sessions_lock:
+                session = sessions.get(session_id)
+            if not session:
+                return json_response(self, 404, {"error": "会话不存在"})
+            text = str(body.get("text", "")).strip()
+            if not text:
+                return json_response(self, 400, {"error": "消息不能为空"})
+            session.enqueue_prompt(text)
+            return json_response(self, 202, session.serialize())
         if parsed.path.startswith("/api/sessions/") and parsed.path.endswith("/resize"):
             session_id = parsed.path.split("/")[3]
             body = read_json(self)
@@ -384,6 +758,68 @@ class Handler(http.server.SimpleHTTPRequestHandler):
             session.resize(int(body.get("cols", 120)), int(body.get("rows", 34)))
             return json_response(self, 200, {"ok": True})
         return json_response(self, 404, {"error": "not found"})
+
+    def git_get(self, parsed):
+        query = parse_qs(parsed.query)
+        cwd = normalize_cwd((query.get("cwd") or [""])[0])
+        try:
+            if (query.get("view") or ["summary"])[0] == "diff":
+                path = (query.get("path") or [""])[0] or None
+                staged = (query.get("staged") or ["0"])[0] == "1"
+                return json_response(self, 200, git_diff(cwd, path, staged))
+            return json_response(self, 200, git_summary(cwd))
+        except Exception as exc:
+            return json_response(self, 400, {"ok": False, "error": str(exc)})
+
+    def git_post(self, parsed):
+        action = parsed.path.split("/")[-1]
+        body = read_json(self)
+        cwd = normalize_cwd(body.get("cwd") or body.get("project"))
+        paths = [str(path) for path in body.get("paths", [])]
+        try:
+            repo = ensure_git_repo(cwd)
+            output = ""
+            if action == "stage":
+                git_cmd(repo, "add", "--", *(paths or ["."]), check=True)
+            elif action == "unstage":
+                git_cmd(repo, "restore", "--staged", "--", *(paths or ["."]), check=True)
+            elif action == "commit":
+                message = str(body.get("message") or "").strip()
+                if not message:
+                    raise RuntimeError("提交信息不能为空。")
+                _, output = git_cmd(repo, "commit", "-m", message, timeout=60, check=True)
+            elif action == "fetch":
+                _, output = git_cmd(repo, "fetch", "--all", "--prune", timeout=120, check=True)
+            elif action == "pull":
+                _, output = git_cmd(repo, "pull", "--ff-only", timeout=120, check=True)
+            elif action == "push":
+                _, output = git_cmd(repo, "push", timeout=120, check=True)
+            else:
+                return json_response(self, 404, {"ok": False, "error": "unknown git action"})
+            summary = git_summary(repo)
+            summary["output"] = output
+            return json_response(self, 200, summary)
+        except Exception as exc:
+            return json_response(self, 400, {"ok": False, "error": str(exc)})
+
+    def files_get(self, parsed):
+        query = parse_qs(parsed.query)
+        cwd = normalize_cwd((query.get("cwd") or [""])[0])
+        view = (query.get("view") or ["tree"])[0]
+        try:
+            if view == "read":
+                return json_response(self, 200, read_file(cwd, (query.get("path") or [""])[0]))
+            return json_response(self, 200, file_tree(cwd))
+        except Exception as exc:
+            return json_response(self, 400, {"ok": False, "error": str(exc)})
+
+    def files_post(self, parsed):
+        body = read_json(self)
+        cwd = normalize_cwd(body.get("cwd"))
+        try:
+            return json_response(self, 200, write_file(cwd, body.get("path"), body.get("content", "")))
+        except Exception as exc:
+            return json_response(self, 400, {"ok": False, "error": str(exc)})
 
     def do_DELETE(self):
         parsed = urlparse(self.path)
@@ -405,6 +841,8 @@ class Handler(http.server.SimpleHTTPRequestHandler):
         cwd = normalize_cwd(body.get("cwd"))
         title = str(body.get("title") or Path(cwd).name or "Claude").strip()
         args = [str(item) for item in body.get("args", []) if str(item)]
+        if not args:
+            args = []
         cols = int(body.get("cols", 120))
         rows = int(body.get("rows", 34))
         prompt = str(body.get("prompt") or "").strip()
@@ -415,7 +853,10 @@ class Handler(http.server.SimpleHTTPRequestHandler):
         with sessions_lock:
             sessions[session.id] = session
         if prompt:
-            threading.Thread(target=session.run_prompt, args=(prompt,), daemon=True).start()
+            if session.master_fd is not None:
+                session.send_initial_pty_prompt(prompt)
+            else:
+                session.enqueue_prompt(prompt)
         return json_response(self, 201, session.serialize())
 
     def handle_ws(self, parsed):
@@ -454,7 +895,7 @@ class Handler(http.server.SimpleHTTPRequestHandler):
                 elif event.get("type") == "message":
                     text = str(event.get("text", "")).strip()
                     if text:
-                        threading.Thread(target=session.run_prompt, args=(text,), daemon=True).start()
+                        session.enqueue_prompt(text)
                 elif event.get("type") == "resize":
                     session.resize(int(event.get("cols", 120)), int(event.get("rows", 34)))
         finally:

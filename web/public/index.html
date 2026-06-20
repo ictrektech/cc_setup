@@ -45,6 +45,15 @@
           <strong>Claude agent</strong>
         </button>
       </section>
+
+      <section class="file-panel">
+        <div class="panel-row">
+          <div class="section-title">Files</div>
+          <button id="fileRefreshBtn" class="ghost mini" type="button">刷新</button>
+        </div>
+        <div id="fileStatus" class="file-status">选择项目后加载文件</div>
+        <div id="fileTree" class="file-tree"></div>
+      </section>
     </aside>
 
     <main class="app">
@@ -76,12 +85,27 @@
             <div class="actions">
               <button id="chatTab" class="ghost active" type="button">对话</button>
               <button id="rawTab" class="ghost" type="button">Raw</button>
+              <div id="fileTabs" class="file-tabs"></div>
               <button id="clearBtn" class="ghost" type="button" disabled>清屏</button>
               <button id="stopBtn" class="danger" type="button" disabled>停止</button>
             </div>
           </div>
           <section id="stream" class="stream" aria-label="agent 对话" tabindex="0"></section>
           <pre id="terminal" aria-label="agent 原始输出" tabindex="0" hidden></pre>
+          <section id="editorPane" class="editor-pane" hidden>
+            <div class="editor-head">
+              <strong id="fileName">未选择文件</strong>
+              <button id="fileSaveBtn" class="ghost mini" type="button" disabled>保存</button>
+            </div>
+            <div id="codeEditor" class="code-editor" data-language="text">
+              <pre id="editorHighlight" aria-hidden="true"></pre>
+              <textarea id="fileEditor" spellcheck="false" disabled></textarea>
+            </div>
+          </section>
+          <form id="composer" class="composer">
+            <textarea id="message" rows="3" placeholder="给当前 agent 发送下一条指令" disabled></textarea>
+            <button id="sendBtn" type="submit" disabled>发送</button>
+          </form>
         </div>
 
         <aside class="inspector">
@@ -94,10 +118,38 @@
             <dt>目录</dt>
             <dd id="inspectCwd">-</dd>
           </dl>
-          <form id="composer" class="composer">
-            <textarea id="message" rows="6" placeholder="给当前 agent 发送下一条指令" disabled></textarea>
-            <button id="sendBtn" type="submit" disabled>发送</button>
-          </form>
+
+          <section class="git-panel">
+            <div class="panel-row">
+              <div class="section-title">Git</div>
+              <button id="gitRefreshBtn" class="ghost mini" type="button">刷新</button>
+            </div>
+            <div id="gitSummary" class="git-summary">选择一个 git 仓库目录</div>
+            <div id="gitGraph" class="git-graph"></div>
+            <div id="gitFiles" class="git-files"></div>
+            <pre id="gitDiff" class="git-diff"></pre>
+            <div class="git-actions">
+              <button id="gitStageFileBtn" class="ghost" type="button">Stage file</button>
+              <button id="gitUnstageFileBtn" class="ghost" type="button">Unstage file</button>
+            </div>
+            <div class="git-actions">
+              <button id="gitStageBtn" class="ghost" type="button">Stage all</button>
+              <button id="gitUnstageBtn" class="ghost" type="button">Unstage all</button>
+            </div>
+            <label>
+              提交信息
+              <input id="gitMessage" autocomplete="off" placeholder="Describe this change" />
+            </label>
+            <div class="git-actions">
+              <button id="gitCommitBtn" type="button">Commit</button>
+              <button id="gitFetchBtn" class="ghost" type="button">Fetch</button>
+            </div>
+            <div class="git-actions">
+              <button id="gitPullBtn" class="ghost" type="button">Pull --ff-only</button>
+              <button id="gitPushBtn" class="ghost" type="button">Push</button>
+            </div>
+            <pre id="gitOutput" class="git-output"></pre>
+          </section>
         </aside>
       </section>
     </main>

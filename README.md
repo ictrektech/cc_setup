@@ -44,7 +44,7 @@ CC_SWITCH_API_KEY="你的 API Key" bash <(curl -LfsS https://raw.githubuserconte
 CC_SWITCH_API_KEY="你的 API Key" CC_SWITCH_INSTALL_RTK=1 bash <(curl -LfsS https://raw.githubusercontent.com/huluxiaohuowa/cc_setup/main/cc_switch_setup.sh || curl -LfsS https://ghfast.top/https://raw.githubusercontent.com/huluxiaohuowa/cc_setup/main/cc_switch_setup.sh)
 ```
 
-`CC_SWITCH_INSTALL_RTK=1` 会安装/修复 `rtk` 到 `~/.local/bin`，并自动执行 `rtk init -g`。RTK 是可选项，如果安装或初始化失败，脚本会继续完成 Claude 和 cc-switch 配置。
+`CC_SWITCH_INSTALL_RTK=1` 会安装/修复 `rtk` 到 `~/.local/bin`，并自动执行 `rtk init -g`。初始化后脚本会检查 `~/.claude/CLAUDE.md`，确保它引用 `@RTK.md` 并包含“先调用工具再回答”的 Agent 工作规则；如发现缺失或不完整，会先备份原文件再修复。RTK 是可选项，如果安装或初始化失败，脚本会继续完成 Claude 和 cc-switch 配置。
 
 已经安装过后，可以用一条命令把 `dummy-keys` 改成自己的 key：
 
@@ -220,8 +220,13 @@ CLAUDE_BIN=/data/jhu/dev/bin/claude PORT=3766 bash dev.sh
 - 使用 `claude -p --verbose --output-format stream-json --include-partial-messages` 运行任务，主对话窗口按 Claude 的真实 `content_block_delta` 流式输出。
 - 主窗口显示结构化的 `System / You / Claude` 对话气泡，避免 Claude TUI spinner、控制字符和 JSON 流污染回答。
 - 提供 Raw 视图查看原始输出，方便排查 Claude CLI 或 JSON stream 问题。
+- 中间工作区支持 `对话 / Raw / 文件` 标签页切换，聊天输入框固定在对话窗口底部，聊天历史保持固定高度并支持鼠标滚动查看上下文。
+- 左侧项目区提供文件夹树，点击文件夹可展开，点击单文件会在中间工作区打开文本编辑器标签页。
 - 发送任务时显示运行状态，例如等待首字、正在生成、完成。
-- 支持浅色/深色主题切换，主题偏好保存在浏览器本地。
+- 支持浅色/深色主题切换，界面采用更接近 macOS 的浅色优先、半透明面板和系统控件风格。
+- 右侧 Git 面板会自动识别当前项目仓库，显示分支、提交、ahead/behind、变更文件、diff 和可点击的 SVG Git graph 分支图。
+- Git 面板支持单文件或全部 `stage / unstage`、填写提交信息后 `commit`，以及 `fetch / pull --ff-only / push`。
+- 文件编辑器支持轻量代码高亮、保存当前文件，保存后右侧 Git 状态会刷新。
 - 同一工作目录已有 running 房间时，再次启动会切换到已有房间，避免误触重复创建。
 
 ## 脚本说明
@@ -231,4 +236,4 @@ CLAUDE_BIN=/data/jhu/dev/bin/claude PORT=3766 bash dev.sh
 - `cc_setup_win.ps1`: Windows PowerShell 安装 Claude 环境、RTK，并写入对应命令。
 - `dworkers_setup.sh`: 克隆/更新 `ictrektech/digital-workers`，重装 skills，生成 `.env` 和示例任务。
 - `digital_workers_setup.sh`: 兼容入口，本地执行时转到 `dworkers_setup.sh`，远程执行时拉取 `dworkers_setup.sh`。
-- `web/`: Agent Room Web 控制台，使用 `claude` 命令，提供项目目录选择、会话启动、实时终端输出和多会话切换。
+- `web/`: Agent Room Web 控制台，使用 `claude` 命令，提供项目目录选择、会话启动、实时终端输出、多会话切换、Git 工作区管理和项目文件编辑。

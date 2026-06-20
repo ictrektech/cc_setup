@@ -382,6 +382,50 @@ function Write-OnboardingConfig {
     Log "已写入 $p"
 }
 
+function Ensure-ClaudeAgentWorkRules {
+    $claudeDir = Join-Path $HOME ".claude"
+    $claudeMd = Join-Path $claudeDir "CLAUDE.md"
+    New-Item -ItemType Directory -Path $claudeDir -Force | Out-Null
+
+    $needsFix = $false
+    if (!(Test-Path $claudeMd)) {
+        $needsFix = $true
+    } else {
+        $text = Get-Content $claudeMd -Raw -ErrorAction SilentlyContinue
+        if ($text -notmatch '(?m)^@RTK\.md$' -or
+            $text -notmatch 'Use tools first\.' -or
+            $text -notmatch 'If a response claims to check, read, inspect, list, or verify something') {
+            $needsFix = $true
+        }
+    }
+
+    if (-not $needsFix) {
+        Log "~/.claude/CLAUDE.md agent work rules 已就绪。"
+        return
+    }
+
+    if (Test-Path $claudeMd) {
+        $stamp = Get-Date -Format "yyyyMMddHHmmss"
+        Copy-Item $claudeMd "$claudeMd.bak.$stamp" -Force -ErrorAction SilentlyContinue
+    }
+
+    $content = @'
+@RTK.md
+
+# Agent Work Rules
+
+When the user asks about files, repositories, code, configuration, shell commands, or project status:
+
+- Use tools first.
+- Do not answer from assumptions.
+- For direct shell commands like `ls`, `pwd`, `cat`, `grep`, `find`, execute them directly.
+- For repository analysis, inspect files before answering.
+- If a response claims to check, read, inspect, list, or verify something, it must call the appropriate tool first.
+'@
+    Set-Content -Path $claudeMd -Value $content -Encoding UTF8
+    Log "已修复 ~/.claude/CLAUDE.md agent work rules。"
+}
+
 
 function Ensure-Rtk {
     New-Item -ItemType Directory -Path $RtkBinDir -Force | Out-Null
@@ -443,6 +487,7 @@ function Ensure-Rtk {
 
     try { & $rtkCmd.Source --version | Out-Host } catch { Warn "rtk --version 执行异常。" }
     try { "y" | & $rtkCmd.Source init -g | Out-Host } catch { Warn "rtk init -g 执行失败，但 rtk 已安装。" }
+    try { Ensure-ClaudeAgentWorkRules } catch { Warn "修复 ~/.claude/CLAUDE.md 失败，请手动检查。" }
 }
 
 function Write-ClaudeCommands {

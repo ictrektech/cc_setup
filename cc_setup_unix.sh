@@ -201,6 +201,45 @@ repair_claude_configs() {
   setup_claude_settings_json
 }
 
+ensure_claude_agent_work_rules() {
+  local claude_dir="$HOME/.claude"
+  local claude_md="$claude_dir/CLAUDE.md"
+  local needs_fix=0
+
+  mkdir -p "$claude_dir"
+  if [ ! -f "$claude_md" ]; then
+    needs_fix=1
+  elif ! grep -qx '@RTK.md' "$claude_md" 2>/dev/null \
+    || ! grep -q 'Use tools first\.' "$claude_md" 2>/dev/null \
+    || ! grep -q 'If a response claims to check, read, inspect, list, or verify something' "$claude_md" 2>/dev/null; then
+    needs_fix=1
+  fi
+
+  if [ "$needs_fix" -ne 1 ]; then
+    log "~/.claude/CLAUDE.md agent work rules 已就绪。"
+    return 0
+  fi
+
+  if [ -f "$claude_md" ]; then
+    cp "$claude_md" "$claude_md.bak.$(date +%Y%m%d%H%M%S)" || true
+  fi
+
+  cat > "$claude_md" <<'EOF'
+@RTK.md
+
+# Agent Work Rules
+
+When the user asks about files, repositories, code, configuration, shell commands, or project status:
+
+- Use tools first.
+- Do not answer from assumptions.
+- For direct shell commands like `ls`, `pwd`, `cat`, `grep`, `find`, execute them directly.
+- For repository analysis, inspect files before answering.
+- If a response claims to check, read, inspect, list, or verify something, it must call the appropriate tool first.
+EOF
+  log "已修复 ~/.claude/CLAUDE.md agent work rules。"
+}
+
 ensure_rtk() {
   mkdir -p "$RTK_BIN_DIR"
   export PATH="$RTK_BIN_DIR:$PATH"
@@ -237,6 +276,7 @@ ensure_rtk() {
 
   rtk --version || true
   printf 'y\n' | rtk init -g || warn "rtk init -g 执行失败，但 rtk 已安装。"
+  ensure_claude_agent_work_rules || warn "修复 ~/.claude/CLAUDE.md 失败，请手动检查。"
 }
 
 
@@ -708,6 +748,45 @@ repair_claude_configs() {
   setup_claude_settings_json
 }
 
+ensure_claude_agent_work_rules() {
+  local claude_dir="$HOME/.claude"
+  local claude_md="$claude_dir/CLAUDE.md"
+  local needs_fix=0
+
+  mkdir -p "$claude_dir"
+  if [ ! -f "$claude_md" ]; then
+    needs_fix=1
+  elif ! grep -qx '@RTK.md' "$claude_md" 2>/dev/null \
+    || ! grep -q 'Use tools first\.' "$claude_md" 2>/dev/null \
+    || ! grep -q 'If a response claims to check, read, inspect, list, or verify something' "$claude_md" 2>/dev/null; then
+    needs_fix=1
+  fi
+
+  if [ "$needs_fix" -ne 1 ]; then
+    log "~/.claude/CLAUDE.md agent work rules 已就绪。"
+    return 0
+  fi
+
+  if [ -f "$claude_md" ]; then
+    cp "$claude_md" "$claude_md.bak.$(date +%Y%m%d%H%M%S)" || true
+  fi
+
+  cat > "$claude_md" <<'EOF'
+@RTK.md
+
+# Agent Work Rules
+
+When the user asks about files, repositories, code, configuration, shell commands, or project status:
+
+- Use tools first.
+- Do not answer from assumptions.
+- For direct shell commands like `ls`, `pwd`, `cat`, `grep`, `find`, execute them directly.
+- For repository analysis, inspect files before answering.
+- If a response claims to check, read, inspect, list, or verify something, it must call the appropriate tool first.
+EOF
+  log "已修复 ~/.claude/CLAUDE.md agent work rules。"
+}
+
 ensure_rtk() {
   mkdir -p "$RTK_BIN_DIR"
   export PATH="$RTK_BIN_DIR:$PATH"
@@ -744,6 +823,7 @@ ensure_rtk() {
 
   rtk --version || true
   printf 'y\n' | rtk init -g || warn "rtk init -g 执行失败，但 rtk 已安装。"
+  ensure_claude_agent_work_rules || warn "修复 ~/.claude/CLAUDE.md 失败，请手动检查。"
 }
 
 write_claude_env_script() {
