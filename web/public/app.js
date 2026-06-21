@@ -884,7 +884,8 @@ function appendAssistantOutput(data) {
   const last = els.stream.lastElementChild;
   if (last?.dataset.role === "assistant") {
     const body = last.querySelector(".bubble-body");
-    body.textContent = compactJoin(body.textContent, clean);
+    const raw = compactJoin(body.dataset.raw || body.textContent, clean);
+    renderBubbleBody(body, raw, "assistant");
   } else {
     appendAssistantMessage(clean);
   }
@@ -900,7 +901,7 @@ function appendAssistantMessage(text) {
   const last = els.stream.lastElementChild;
   if (last?.dataset.role === "assistant") {
     const body = last.querySelector(".bubble-body");
-    if (body?.textContent.trim() === clean) return;
+    if ((body?.dataset.raw || body?.textContent || "").trim() === clean) return;
   }
   appendBubble("assistant", text);
 }
@@ -921,6 +922,7 @@ function startAssistantStream(streamId) {
   item.dataset.role = "assistant";
   item.dataset.streamId = streamId;
   item.innerHTML = '<div class="bubble-label">Claude <span class="typing">生成中</span></div><div class="bubble-body"></div>';
+  item.querySelector(".bubble-body").dataset.raw = "";
   els.stream.appendChild(item);
   els.stream.scrollTop = els.stream.scrollHeight;
   setRunStatus("Claude 正在生成回答...");
@@ -930,7 +932,7 @@ function appendAssistantDelta(streamId, text) {
   const item = els.stream.querySelector(`[data-stream-id="${streamId}"]`);
   if (!item) return;
   const body = item.querySelector(".bubble-body");
-  body.textContent += text;
+  renderBubbleBody(body, (body.dataset.raw || "") + text, "assistant");
   els.stream.scrollTop = els.stream.scrollHeight;
 }
 
@@ -948,7 +950,7 @@ function replaceLatestAssistant(text) {
     return;
   }
   const body = item.querySelector(".bubble-body");
-  if (body) body.textContent = text;
+  if (body) renderBubbleBody(body, text, "assistant");
   settleAssistantBubble(item);
   els.stream.scrollTop = els.stream.scrollHeight;
 }
@@ -968,9 +970,19 @@ function appendBubble(role, text) {
   item.className = `bubble ${role}`;
   item.dataset.role = role;
   item.innerHTML = `<div class="bubble-label">${roleLabel(role)}</div><div class="bubble-body"></div>`;
-  item.querySelector(".bubble-body").textContent = clean;
+  renderBubbleBody(item.querySelector(".bubble-body"), clean, role);
   els.stream.appendChild(item);
   els.stream.scrollTop = els.stream.scrollHeight;
+}
+
+function renderBubbleBody(body, text, role) {
+  const clean = String(text || "").trim();
+  body.dataset.raw = clean;
+  if (role === "assistant" || role === "system") {
+    body.innerHTML = renderMarkdown(clean);
+  } else {
+    body.textContent = clean;
+  }
 }
 
 function setRunStatus(text) {
@@ -1039,6 +1051,92 @@ function looksLikeJsonEvent(value) {
 
 function cleanUserInput(value) {
   return String(value || "").replace(/\r/g, "").trim();
+}
+
+function renderMarkdown(value) {
+  const lines = String(value || "").replace(/\r/g, "").split("\n");
+  const html = [];
+  let paragraph = [];
+  let list = [];
+  let inCode = false;
+  let codeLang = "";
+  let codeLines = [];
+
+  const flushParagraph = () => {
+    if (!paragraph.length) return;
+    html.push(`<p>${renderInlineMarkdown(paragraph.join(" "))}</p>`);
+    paragraph = [];
+  };
+  const flushList = () => {
+    if (!list.length) return;
+    html.push(`<ul>${list.map((item) => `<li>${renderInlineMarkdown(item)}</li>`).join("")}</ul>`);
+    list = [];
+  };
+  const flushCode = () => {
+    const lang = codeLang ? `<span>${escapeHtml(codeLang)}</span>` : "";
+    html.push(`<pre class="md-code">${lang}<code>${escapeHtml(codeLines.join("\n"))}</code></pre>`);
+    codeLines = [];
+    codeLang = "";
+  };
+
+  for (const line of lines) {
+    const fence = line.match(/^```(\S*)\s*$/);
+    if (fence) {
+      if (inCode) {
+        flushCode();
+        inCode = false;
+      } else {
+        flushParagraph();
+        flushList();
+        inCode = true;
+        codeLang = fence[1] || "";
+      }
+      continue;
+    }
+    if (inCode) {
+      codeLines.push(line);
+      continue;
+    }
+    if (!line.trim()) {
+      flushParagraph();
+      flushList();
+      continue;
+    }
+    const heading = line.match(/^(#{1,4})\s+(.+)$/);
+    if (heading) {
+      flushParagraph();
+      flushList();
+      const level = heading[1].length + 1;
+      html.push(`<h${level}>${renderInlineMarkdown(heading[2])}</h${level}>`);
+      continue;
+    }
+    const bullet = line.match(/^\s*[-*]\s+(.+)$/);
+    if (bullet) {
+      flushParagraph();
+      list.push(bullet[1]);
+      continue;
+    }
+    flushList();
+    paragraph.push(line.trim());
+  }
+  if (inCode) flushCode();
+  flushParagraph();
+  flushList();
+  return html.join("");
+}
+
+function renderInlineMarkdown(value) {
+  const placeholders = [];
+  let text = escapeHtml(value);
+  text = text.replace(/`([^`]+)`/g, (_, code) => {
+    const token = `\u0000${placeholders.length}\u0000`;
+    placeholders.push(`<code>${code}</code>`);
+    return token;
+  });
+  text = text
+    .replace(/\*\*([^*]+)\*\*/g, "<strong>$1</strong>")
+    .replace(/\[([^\]]+)\]\((https?:\/\/[^)\s]+)\)/g, '<a href="$2" target="_blank" rel="noreferrer">$1</a>');
+  return text.replace(/\u0000(\d+)\u0000/g, (_, index) => placeholders[Number(index)] || "");
 }
 
 function compactJoin(left, right) {

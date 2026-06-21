@@ -564,6 +564,7 @@ class Session:
                 "--verbose",
                 "--output-format",
                 "stream-json",
+                "--include-partial-messages",
             ]
             if self.provider_session_id:
                 command_args.extend(["--resume", self.provider_session_id])
