@@ -131,6 +131,7 @@ function renderSessions() {
   els.runStatus.textContent = currentStatusText(session);
   els.message.disabled = !session || session.status !== "running";
   els.sendBtn.disabled = !session || session.status !== "running";
+  els.sendBtn.textContent = session?.busy ? "排队" : "发送";
   els.clearBtn.disabled = !session;
   els.stopBtn.disabled = !session || session.status !== "running";
   els.launchBtn.disabled = state.launching;
@@ -273,8 +274,10 @@ els.composer.addEventListener("submit", (event) => {
   event.preventDefault();
   const value = els.message.value.trimEnd();
   if (!value || !state.socket || state.socket.readyState !== WebSocket.OPEN) return;
+  const session = activeSession();
   state.socket.send(JSON.stringify({ type: "message", text: value }));
   els.message.value = "";
+  if (session?.busy) setRunStatus(`已加入队列，当前还有 ${(session.queueLength || 0) + 1} 条等待。`);
 });
 
 els.message.addEventListener("keydown", (event) => {
@@ -919,7 +922,8 @@ function setRunStatus(text) {
 
 function currentStatusText(session) {
   if (!session) return "空闲";
-  if (session.busy) return "Claude 正在处理";
+  const queueText = session.queueLength ? `，队列 ${session.queueLength} 条` : "";
+  if (session.busy) return `Claude 正在处理${queueText}`;
   const statusEvent = [...(session.events || [])].reverse().find((event) => event.type === "status");
   if (statusEvent?.text) return statusEvent.text;
   return session.status === "running" ? "等待输入" : "已结束";

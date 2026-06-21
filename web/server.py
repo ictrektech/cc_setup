@@ -299,6 +299,26 @@ def resize_pty(fd, cols, rows):
     fcntl.ioctl(fd, termios.TIOCSWINSZ, packed)
 
 
+def terminate_process_group(proc, grace_seconds=5):
+    if not proc or proc.poll() is not None:
+        return
+    try:
+        os.killpg(os.getpgid(proc.pid), signal.SIGTERM)
+    except Exception:
+        proc.terminate()
+    deadline = time.time() + grace_seconds
+    while time.time() < deadline:
+        if proc.poll() is not None:
+            return
+        time.sleep(0.1)
+    if proc.poll() is not None:
+        return
+    try:
+        os.killpg(os.getpgid(proc.pid), signal.SIGKILL)
+    except Exception:
+        proc.kill()
+
+
 class WsClient:
     def __init__(self, handler):
         self.handler = handler
@@ -454,7 +474,7 @@ class Session:
         if self.busy:
             self.prompt_queue.append(prompt)
             self.add_event("user", prompt)
-            self.add_status(f"Claude 正在处理上一条消息，已排队 {len(self.prompt_queue)} 条。")
+            self.add_status(f"Claude 正在处理上一条消息，已排队 {len(self.prompt_queue)} 条，完成后会自动继续。")
             self.broadcast_session()
             return
         self.add_event("user", prompt)
@@ -475,7 +495,7 @@ class Session:
             "providerSessionId": self.provider_session_id,
             "permissionMode": os.environ.get("CLAUDE_PERMISSION_MODE", "acceptEdits"),
             "maxTurns": int(os.environ.get("CLAUDE_MAX_TURNS", "12")),
-            "timeoutSeconds": int(os.environ.get("CLAUDE_RUN_TIMEOUT", "180")),
+            "timeoutSeconds": int(os.environ.get("CLAUDE_RUN_TIMEOUT", "600")),
         }
 
         try:
@@ -510,11 +530,11 @@ class Session:
                 nonlocal timed_out
                 if self.worker_proc and self.worker_proc.poll() is None:
                     timed_out = True
-                    self.add_event("system", f"Claude 运行超过 {payload['timeoutSeconds']} 秒，已自动停止。")
-                    try:
-                        os.killpg(os.getpgid(self.worker_proc.pid), signal.SIGTERM)
-                    except Exception:
-                        self.worker_proc.terminate()
+                    queued = len(self.prompt_queue)
+                    suffix = f"队列中还有 {queued} 条，停止后会自动继续。" if queued else "没有排队消息。"
+                    self.add_event("system", f"Claude 运行超过 {payload['timeoutSeconds']} 秒，已自动停止当前轮。{suffix}")
+                    self.broadcast_session()
+                    terminate_process_group(self.worker_proc)
 
             timer = threading.Timer(payload["timeoutSeconds"], kill_on_timeout)
             timer.daemon = True
@@ -620,7 +640,7 @@ class Session:
             self.broadcast_session()
             if self.status == "running" and self.prompt_queue:
                 next_prompt = self.prompt_queue.popleft()
-                self.add_status(f"继续处理队列中的下一条消息，剩余 {len(self.prompt_queue)} 条。")
+                self.add_status(f"开始处理排队消息，剩余 {len(self.prompt_queue)} 条。")
                 self.broadcast_session()
                 threading.Thread(target=self.run_prompt, args=(next_prompt,), daemon=True).start()
 
