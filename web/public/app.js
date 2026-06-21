@@ -67,7 +67,9 @@ const els = {
 
 const CWD_STORAGE_KEY = "agent-room.cwd";
 const THEME_STORAGE_KEY = "agent-room.theme";
+const ACTIVE_SESSION_STORAGE_KEY = "agent-room.active-session";
 els.cwd.value = localStorage.getItem(CWD_STORAGE_KEY) || "";
+state.activeId = localStorage.getItem(ACTIVE_SESSION_STORAGE_KEY) || null;
 setTheme(localStorage.getItem(THEME_STORAGE_KEY) || "light");
 
 async function request(path, options = {}) {
@@ -84,10 +86,18 @@ function activeSession() {
   return state.sessions.find((session) => session.id === state.activeId);
 }
 
+function currentProjectCwd() {
+  return activeSession()?.cwd || els.cwd.value.trim();
+}
+
+function canSendToSession(session) {
+  return Boolean(session && session.status !== "exited");
+}
+
 function renderSessions() {
   els.sessionList.innerHTML = "";
   const running = state.sessions.filter((session) => session.status === "running").length;
-  const done = state.sessions.filter((session) => session.status !== "running").length;
+  const done = state.sessions.filter((session) => session.status === "exited").length;
   els.runningCount.textContent = running;
   els.doneCount.textContent = done;
   els.totalCount.textContent = state.sessions.length;
@@ -114,7 +124,7 @@ function renderSessions() {
       </div>
       <div class="room-bottom">
         <span>Claude</span>
-        <span>${session.exitCode === null ? "live" : `code ${session.exitCode}`}</span>
+        <span>${sessionStatusLabel(session)}</span>
       </div>
     `;
     item.addEventListener("click", () => activate(session.id));
@@ -122,15 +132,16 @@ function renderSessions() {
   }
 
   const session = activeSession();
+  const projectCwd = currentProjectCwd();
   els.activeTitle.textContent = session ? session.title : "还没有会话";
   els.activeMeta.textContent = session ? `${session.command} · ${session.cwd}` : "选择项目目录，启动一个 Claude agent";
-  els.projectName.textContent = session ? basename(session.cwd) : basename(els.cwd.value) || "未选择";
+  els.projectName.textContent = projectCwd ? basename(projectCwd) : "未选择";
   els.inspectStatus.textContent = session?.status || "空闲";
   els.inspectCommand.textContent = session?.command || "-";
   els.inspectCwd.textContent = session?.cwd || "-";
   els.runStatus.textContent = currentStatusText(session);
-  els.message.disabled = !session || session.status !== "running";
-  els.sendBtn.disabled = !session || session.status !== "running";
+  els.message.disabled = !canSendToSession(session);
+  els.sendBtn.disabled = !canSendToSession(session);
   els.sendBtn.textContent = session?.busy ? "排队" : "发送";
   els.clearBtn.disabled = !session;
   els.stopBtn.disabled = !session || session.status !== "running";
@@ -142,8 +153,8 @@ function renderSessions() {
   els.terminal.hidden = state.view !== "raw";
   els.editorPane.hidden = state.view !== "editor";
   els.composer.hidden = state.view !== "chat";
-  setGitEnabled(Boolean(session));
-  setFileEnabled(Boolean(session));
+  setGitEnabled(Boolean(projectCwd));
+  setFileEnabled(Boolean(projectCwd));
   renderFileTabs();
 }
 
@@ -194,7 +205,14 @@ function connect(sessionId) {
 
 function activate(sessionId) {
   state.activeId = sessionId;
+  localStorage.setItem(ACTIVE_SESSION_STORAGE_KEY, sessionId);
+  const session = activeSession();
+  if (session?.cwd) {
+    els.cwd.value = session.cwd;
+    localStorage.setItem(CWD_STORAGE_KEY, session.cwd);
+  }
   connect(sessionId);
+  resetProjectSelection();
   renderSessions();
   refreshGit();
   refreshFiles();
@@ -205,7 +223,19 @@ async function refresh() {
   const health = await request("/api/health");
   els.commandBadge.textContent = health.command ? basename(health.command) : "未找到";
   state.sessions = await request("/api/sessions");
-  if (!state.activeId && state.sessions.length) state.activeId = state.sessions[0].id;
+  if (state.activeId && !state.sessions.some((session) => session.id === state.activeId)) {
+    state.activeId = null;
+    localStorage.removeItem(ACTIVE_SESSION_STORAGE_KEY);
+  }
+  if (!state.activeId && state.sessions.length) {
+    state.activeId = state.sessions[0].id;
+    localStorage.setItem(ACTIVE_SESSION_STORAGE_KEY, state.activeId);
+  }
+  const session = activeSession();
+  if (session?.cwd) {
+    els.cwd.value = session.cwd;
+    localStorage.setItem(CWD_STORAGE_KEY, session.cwd);
+  }
   renderSessions();
   if (state.activeId) {
     connect(state.activeId);
@@ -219,7 +249,7 @@ els.form.addEventListener("submit", async (event) => {
   const cwd = els.cwd.value.trim();
   localStorage.setItem(CWD_STORAGE_KEY, cwd);
 
-  const existing = state.sessions.find((session) => session.status === "running" && session.cwd === cwd);
+  const existing = state.sessions.find((session) => session.status !== "exited" && session.cwd === cwd);
   if (existing) {
     activate(existing.id);
     return;
@@ -249,6 +279,22 @@ els.form.addEventListener("submit", async (event) => {
     state.launching = false;
     renderSessions();
   }
+});
+
+els.cwd.addEventListener("change", () => {
+  const cwd = els.cwd.value.trim();
+  localStorage.setItem(CWD_STORAGE_KEY, cwd);
+  state.activeId = null;
+  localStorage.removeItem(ACTIVE_SESSION_STORAGE_KEY);
+  if (state.socket) {
+    state.socket.close();
+    state.socket = null;
+  }
+  resetProjectSelection();
+  renderTranscript([]);
+  renderSessions();
+  refreshGit();
+  refreshFiles();
 });
 
 els.chatTab.addEventListener("click", () => {
@@ -335,7 +381,18 @@ els.fileEditor.addEventListener("scroll", () => {
 });
 
 function activeCwd() {
-  return activeSession()?.cwd || els.cwd.value.trim();
+  return currentProjectCwd();
+}
+
+function resetProjectSelection() {
+  state.selectedGitPath = "";
+  state.selectedFilePath = "";
+  state.selectedCommit = "";
+  state.currentFileLanguage = "text";
+  state.openFiles = [];
+  els.fileName.textContent = "未选择文件";
+  els.fileEditor.value = "";
+  renderCodeHighlight("", "text");
 }
 
 function setGitEnabled(enabled) {
@@ -920,10 +977,18 @@ function setRunStatus(text) {
   els.runStatus.textContent = text || "空闲";
 }
 
+function sessionStatusLabel(session) {
+  if (!session) return "-";
+  if (session.status === "ready") return session.providerSessionId ? "可恢复" : "ready";
+  if (session.status === "running") return session.busy ? "working" : "live";
+  return session.exitCode === null ? session.status : `code ${session.exitCode}`;
+}
+
 function currentStatusText(session) {
   if (!session) return "空闲";
   const queueText = session.queueLength ? `，队列 ${session.queueLength} 条` : "";
   if (session.busy) return `Claude 正在处理${queueText}`;
+  if (session.status === "ready") return session.providerSessionId ? "可继续之前的 Claude 会话" : "等待输入";
   const statusEvent = [...(session.events || [])].reverse().find((event) => event.type === "status");
   if (statusEvent?.text) return statusEvent.text;
   return session.status === "running" ? "等待输入" : "已结束";

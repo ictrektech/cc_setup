@@ -20,6 +20,7 @@ from urllib.parse import parse_qs, urlparse
 ROOT = Path(__file__).resolve().parent
 PUBLIC = ROOT / "public"
 PORT = int(os.environ.get("PORT", "3766"))
+SESSIONS_PATH = Path(os.environ.get("AGENTROOM_SESSIONS_PATH", ROOT / ".agentroom_sessions.json"))
 WS_GUID = "258EAFA5-E914-47DA-95CA-C5AB0DC85B11"
 sessions = {}
 sessions_lock = threading.RLock()
@@ -299,6 +300,39 @@ def resize_pty(fd, cols, rows):
     fcntl.ioctl(fd, termios.TIOCSWINSZ, packed)
 
 
+def save_sessions():
+    try:
+        SESSIONS_PATH.parent.mkdir(parents=True, exist_ok=True)
+        with sessions_lock:
+            payload = [session.serialize() for session in sessions.values()]
+        tmp = SESSIONS_PATH.with_suffix(SESSIONS_PATH.suffix + ".tmp")
+        tmp.write_text(json.dumps(payload, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
+        tmp.replace(SESSIONS_PATH)
+    except Exception as exc:
+        print(f"[WARN] save sessions failed: {exc}")
+
+
+def load_sessions(command):
+    if not SESSIONS_PATH.exists():
+        return
+    try:
+        data = json.loads(SESSIONS_PATH.read_text(encoding="utf-8"))
+    except Exception as exc:
+        print(f"[WARN] load sessions failed: {exc}")
+        return
+    if not isinstance(data, list):
+        return
+    with sessions_lock:
+        for item in data:
+            if not isinstance(item, dict):
+                continue
+            try:
+                session = Session.from_saved(item, command)
+                sessions[session.id] = session
+            except Exception as exc:
+                print(f"[WARN] restore session failed: {exc}")
+
+
 def terminate_process_group(proc, grace_seconds=5):
     if not proc or proc.poll() is not None:
         return
@@ -350,27 +384,44 @@ class WsClient:
 
 
 class Session:
-    def __init__(self, title, cwd, command, args, cols, rows):
-        self.id = str(uuid.uuid4())
+    def __init__(self, title, cwd, command, args, cols, rows, saved=None):
+        saved = saved or {}
+        self.id = str(saved.get("id") or uuid.uuid4())
         self.title = title
         self.cwd = cwd
         self.command = command
-        self.status = "running"
-        self.created_at = iso_now()
-        self.last_output_at = None
-        self.exit_code = None
-        self.buffer = deque(maxlen=1000)
-        self.events = deque(maxlen=500)
+        self.status = str(saved.get("status") or "running")
+        self.created_at = str(saved.get("createdAt") or iso_now())
+        self.last_output_at = saved.get("lastOutputAt")
+        self.exit_code = saved.get("exitCode")
+        self.buffer = deque(saved.get("buffer") or [], maxlen=1000)
+        self.events = deque(saved.get("events") or [], maxlen=500)
         self.clients = set()
         self.master_fd = None
         self.proc = None
         self.worker_proc = None
         self.busy = False
         self.prompt_queue = deque()
-        self.provider_session_id = None
-        self.add_event("system", "房间已就绪。Claude 将以结构化 Agent 模式运行，工具调用、执行状态和回答会分开显示。")
+        self.provider_session_id = saved.get("providerSessionId")
+        if not saved:
+            self.add_event("system", "房间已就绪。Claude 将以结构化 Agent 模式运行，工具调用、执行状态和回答会分开显示。")
         if args:
             self.start_pty(args, cols, rows)
+
+    @classmethod
+    def from_saved(cls, data, command):
+        status = data.get("status")
+        saved = {**data, "status": "ready" if status == "running" else (status or "ready")}
+        saved["busy"] = False
+        return cls(
+            str(data.get("title") or Path(str(data.get("cwd") or "")).name or "Claude"),
+            normalize_cwd(data.get("cwd")),
+            command or str(data.get("command") or "claude"),
+            [],
+            120,
+            34,
+            saved=saved,
+        )
 
     def serialize(self):
         return {
@@ -392,15 +443,18 @@ class Session:
     def add_event(self, event_type, text, broadcast=True):
         event = {"type": event_type, "text": text, "createdAt": iso_now()}
         self.events.append(event)
+        save_sessions()
         if broadcast:
             self.broadcast({"type": "event", "event": event})
 
     def add_status(self, text):
         event = {"type": "status", "text": text, "createdAt": iso_now()}
         self.events.append(event)
+        save_sessions()
         self.broadcast({"type": "event", "event": event})
 
     def broadcast_session(self):
+        save_sessions()
         self.broadcast({"type": "session_update", "session": self.serialize()})
 
     def write(self, data, record_user=False):
@@ -435,12 +489,10 @@ class Session:
             for proc in [self.worker_proc, self.proc]:
                 if not proc:
                     continue
-                try:
-                    os.killpg(os.getpgid(proc.pid), signal.SIGTERM)
-                except Exception:
-                    proc.terminate()
+                terminate_process_group(proc, grace_seconds=1)
             self.status = "exited"
             self.exit_code = -15
+            save_sessions()
             self.broadcast({"type": "status", "status": self.status, "exitCode": self.exit_code})
 
     def start_pty(self, args, cols, rows):
@@ -468,6 +520,9 @@ class Session:
         prompt = prompt.strip()
         if not prompt:
             return
+        if self.status == "ready":
+            self.status = "running"
+            self.exit_code = None
         if self.master_fd is not None:
             self.send_pty_message(prompt)
             return
@@ -637,9 +692,12 @@ class Session:
         finally:
             self.worker_proc = None
             self.busy = False
+            if self.status == "running":
+                self.status = "ready"
             self.broadcast_session()
-            if self.status == "running" and self.prompt_queue:
+            if self.status in {"running", "ready"} and self.prompt_queue:
                 next_prompt = self.prompt_queue.popleft()
+                self.status = "running"
                 self.add_status(f"开始处理排队消息，剩余 {len(self.prompt_queue)} 条。")
                 self.broadcast_session()
                 threading.Thread(target=self.run_prompt, args=(next_prompt,), daemon=True).start()
@@ -845,12 +903,13 @@ class Handler(http.server.SimpleHTTPRequestHandler):
         parsed = urlparse(self.path)
         if parsed.path.startswith("/api/sessions/"):
             session_id = parsed.path.split("/")[3]
-            with sessions_lock:
-                session = sessions.pop(session_id, None)
-            if not session:
-                return json_response(self, 404, {"error": "会话不存在"})
-            session.stop()
-            return json_response(self, 200, {"ok": True})
+        with sessions_lock:
+            session = sessions.pop(session_id, None)
+        if not session:
+            return json_response(self, 404, {"error": "会话不存在"})
+        session.stop()
+        save_sessions()
+        return json_response(self, 200, {"ok": True})
         return json_response(self, 404, {"error": "not found"})
 
     def create_session(self):
@@ -872,6 +931,7 @@ class Handler(http.server.SimpleHTTPRequestHandler):
             return json_response(self, 500, {"error": f"启动失败：{exc}", "command": command, "cwd": cwd})
         with sessions_lock:
             sessions[session.id] = session
+        save_sessions()
         if prompt:
             if session.master_fd is not None:
                 session.send_initial_pty_prompt(prompt)
@@ -950,6 +1010,7 @@ class ThreadingServer(socketserver.ThreadingMixIn, http.server.HTTPServer):
 if __name__ == "__main__":
     os.chdir(ROOT)
     command = resolve_command()
+    load_sessions(command)
     print(f"agent-room listening on http://0.0.0.0:{PORT}")
     print(f"Claude command: {command or 'not found'}")
     ThreadingServer(("0.0.0.0", PORT), Handler).serve_forever()
