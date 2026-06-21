@@ -535,14 +535,14 @@ class Session:
         self.add_event("user", prompt)
         threading.Thread(target=self.run_prompt, args=(prompt,), daemon=True).start()
 
-    def run_prompt(self, prompt):
+    def run_prompt(self, prompt, include_partial=True, fallback_attempted=False):
         prompt = prompt.strip()
         if not prompt:
             return
 
         self.busy = True
         self.broadcast_session()
-        self.add_status("Claude 正在启动...")
+        self.add_status("Claude 正在启动..." if include_partial else "Claude 正在以兼容模式继续...")
         payload = {
             "cwd": self.cwd,
             "command": self.command,
@@ -564,8 +564,9 @@ class Session:
                 "--verbose",
                 "--output-format",
                 "stream-json",
-                "--include-partial-messages",
             ]
+            if include_partial:
+                command_args.append("--include-partial-messages")
             if self.provider_session_id:
                 command_args.extend(["--resume", self.provider_session_id])
             command_args.append(prompt)
@@ -599,6 +600,9 @@ class Session:
             active_stream_id = None
             streamed_text = ""
             has_result = False
+            saw_stream_tool_use = False
+            saw_tool_result = False
+            rerun_without_partial = False
             raw_tail = deque(maxlen=8)
             self.add_status("等待 Claude 响应...")
             for line in self.worker_proc.stdout or []:
@@ -634,6 +638,7 @@ class Session:
                             streamed_text = ""
                             self.broadcast({"type": "assistant_start", "streamId": active_stream_id})
                         elif block.get("type") == "tool_use":
+                            saw_stream_tool_use = True
                             name = block.get("name") or "tool"
                             self.add_status(f"Claude 正在调用工具：{name}")
                     elif stream_type == "content_block_delta":
@@ -644,6 +649,10 @@ class Session:
                             self.broadcast({"type": "assistant_delta", "streamId": active_stream_id, "text": text_delta})
                     elif stream_type in {"content_block_stop", "message_stop"}:
                         if active_stream_id:
+                            if streamed_text.strip() and streamed_text not in seen:
+                                seen.add(streamed_text)
+                                has_result = True
+                                self.add_event("assistant", streamed_text, broadcast=False)
                             self.broadcast({"type": "assistant_done", "streamId": active_stream_id})
                             active_stream_id = None
                     continue
@@ -654,14 +663,17 @@ class Session:
                             text = block.get("text", "").strip()
                             if text and not streamed_text and text not in seen:
                                 seen.add(text)
+                                has_result = True
                                 self.add_event("assistant", text, broadcast=False)
                                 self.broadcast({"type": "assistant_start", "streamId": str(uuid.uuid4())})
                                 self.broadcast({"type": "assistant_replace", "text": text})
                         elif block.get("type") == "tool_use":
+                            saw_stream_tool_use = True
                             self.add_status(f"Claude 正在调用工具：{block.get('name') or 'tool'}")
                 elif message_event.get("type") == "user":
                     result = message_event.get("tool_use_result")
                     if result is not None:
+                        saw_tool_result = True
                         name = result.get("name") if isinstance(result, dict) else ""
                         self.add_status(f"{name or '工具'}结果已返回，等待 Claude 继续...")
                 elif message_event.get("type") == "result":
@@ -685,14 +697,23 @@ class Session:
                 suffix = f"\n{detail}" if detail else ""
                 self.add_event("system", f"Claude 进程退出码：{code}{suffix}")
             elif code == 0:
-                if not has_result:
+                if not has_result and include_partial and saw_stream_tool_use and not saw_tool_result and not fallback_attempted:
+                    rerun_without_partial = True
+                    self.add_status("检测到流式工具调用未完成，切换兼容模式继续本轮。")
+                elif not has_result:
                     self.add_event("system", "Claude 本轮没有返回最终结果，可能仍停在工具调用中。")
-                self.add_status("完成。")
+                if not rerun_without_partial:
+                    self.add_status("完成。")
         except Exception as exc:
             self.add_event("system", f"Claude 启动失败：{exc}")
         finally:
             self.worker_proc = None
             self.busy = False
+            if locals().get("rerun_without_partial"):
+                self.status = "running"
+                self.broadcast_session()
+                threading.Thread(target=self.run_prompt, args=(prompt, False, True), daemon=True).start()
+                return
             if self.status == "running":
                 self.status = "ready"
             self.broadcast_session()
