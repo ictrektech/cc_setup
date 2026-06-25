@@ -2,7 +2,7 @@
 
 Claude / Codex / RTK / skills / digital-workers 的一键安装脚本集合。
 
-## Agent 环境安装
+## Claude / Codex 环境安装
 
 这里提供两种互斥方案。推荐新机器优先使用 cc-switch 方案；如果已经在使用 cc-haha，可以继续使用 cc-haha 方案，或者运行 cc-switch 方案自动卸载 cc-haha 后切换。
 
