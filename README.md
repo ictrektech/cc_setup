@@ -229,7 +229,7 @@ CLAUDE_BIN=claude-haha python3 -m digital_worker.runner full \
 
 ## Agent Room Web 控制台
 
-仓库里提供了一个本地 Web 控制台，可启动和管理当前机器上的 Claude agent 会话。Web app 只使用 `claude` 命令。
+仓库里提供了一个本地 Web 控制台，可启动和管理当前机器上的 Claude / Codex agent 会话。
 
 ![Agent Room Web 控制台](docs/images/agent-room.jpg)
 
@@ -253,13 +253,15 @@ http://<远端 IP>:3766
 常用环境变量：
 
 ```bash
-CLAUDE_BIN=/data/jhu/dev/bin/claude PORT=3766 bash dev.sh
+CLAUDE_BIN=/data/jhu/dev/bin/claude CODEX_BIN=/home/jhu/.local/npm/bin/codex PORT=3766 bash dev.sh
 ```
 
 当前功能：
 
-- 以项目目录为单位创建 Agent Room，并在顶部显示运行中、已结束和总会话数。
+- 以项目目录和 agent 类型为单位创建 Agent Room，并在顶部显示运行中、已结束和总会话数。
+- 支持 Claude 和 Codex 两种 agent；新建房间时可选择 agent 类型，房间会保存对应的 provider session/thread id。
 - 使用 `claude -p --verbose --output-format stream-json --include-partial-messages` 运行任务，主对话窗口按 Claude 的真实 `content_block_delta` 流式输出。
+- 使用 `codex exec --json` / `codex exec resume --json` 运行 Codex 任务，并在 Raw 视图保留 Codex JSONL 事件。
 - 主窗口显示结构化的 `System / You / Claude` 对话气泡，避免 Claude TUI spinner、控制字符和 JSON 流污染回答。
 - 提供 Raw 视图查看原始输出，方便排查 Claude CLI 或 JSON stream 问题。
 - 中间工作区支持 `对话 / Raw / 文件` 标签页切换，聊天输入框固定在对话窗口底部，聊天历史保持固定高度并支持鼠标滚动查看上下文。
@@ -278,4 +280,4 @@ CLAUDE_BIN=/data/jhu/dev/bin/claude PORT=3766 bash dev.sh
 - `cc_setup_win.ps1`: Windows PowerShell 安装 Claude 环境、RTK，并写入对应命令。
 - `dworkers_setup.sh`: 克隆/更新 `ictrektech/digital-workers`，重装 skills，生成 `.env` 和示例任务。
 - `digital_workers_setup.sh`: 兼容入口，本地执行时转到 `dworkers_setup.sh`，远程执行时拉取 `dworkers_setup.sh`。
-- `web/`: Agent Room Web 控制台，使用 `claude` 命令，提供项目目录选择、会话启动、实时终端输出、多会话切换、Git 工作区管理和项目文件编辑。
+- `web/`: Agent Room Web 控制台，支持 `claude` / `codex` 命令，提供项目目录选择、会话启动、实时输出、多会话切换、Git 工作区管理和项目文件编辑。

@@ -8,11 +8,11 @@
   </head>
   <body>
     <aside class="rail">
-      <div class="brand">
+        <div class="brand">
         <div class="mark">C</div>
         <div>
           <strong>Agent Room</strong>
-          <span>Claude agent 编排台</span>
+          <span>Claude / Codex agent 编排台</span>
         </div>
       </div>
 
@@ -27,8 +27,15 @@
             <input id="cwd" name="cwd" autocomplete="off" placeholder="/home/jhu/dev/repos/project" />
           </label>
           <label>
+            Agent
+            <select id="agentType" name="agent">
+              <option value="claude">Claude</option>
+              <option value="codex">Codex</option>
+            </select>
+          </label>
+          <label>
             任务指令
-            <textarea id="prompt" name="prompt" rows="5" placeholder="描述你希望 Claude 做什么"></textarea>
+            <textarea id="prompt" name="prompt" rows="5" placeholder="描述你希望 agent 做什么"></textarea>
           </label>
           <button id="launchBtn" type="submit">启动 agent</button>
         </form>
@@ -42,7 +49,7 @@
         </button>
         <button class="project" type="button">
           <span>Agent 类型</span>
-          <strong>Claude agent</strong>
+          <strong id="agentName">Agent</strong>
         </button>
       </section>
 
@@ -79,7 +86,7 @@
           <div class="terminal-head">
             <div>
               <strong id="activeTitle">还没有会话</strong>
-              <span id="activeMeta">选择项目目录，启动一个 Claude agent</span>
+              <span id="activeMeta">选择项目目录，启动一个 agent</span>
               <em id="runStatus">空闲</em>
             </div>
             <div class="actions">

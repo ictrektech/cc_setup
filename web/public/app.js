@@ -14,6 +14,7 @@ const state = {
 const els = {
   form: document.querySelector("#launchForm"),
   launchBtn: document.querySelector("#launchBtn"),
+  agentType: document.querySelector("#agentType"),
   cwd: document.querySelector("#cwd"),
   prompt: document.querySelector("#prompt"),
   sessionList: document.querySelector("#sessionList"),
@@ -34,6 +35,7 @@ const els = {
   stopBtn: document.querySelector("#stopBtn"),
   commandBadge: document.querySelector("#commandBadge"),
   projectName: document.querySelector("#projectName"),
+  agentName: document.querySelector("#agentName"),
   runningCount: document.querySelector("#runningCount"),
   doneCount: document.querySelector("#doneCount"),
   totalCount: document.querySelector("#totalCount"),
@@ -123,7 +125,7 @@ function renderSessions() {
         <div class="room-path">${escapeHtml(session.cwd)}</div>
       </div>
       <div class="room-bottom">
-        <span>Claude</span>
+        <span>${escapeHtml(agentLabel(session.agent))}</span>
         <span>${sessionStatusLabel(session)}</span>
       </div>
     `;
@@ -134,8 +136,9 @@ function renderSessions() {
   const session = activeSession();
   const projectCwd = currentProjectCwd();
   els.activeTitle.textContent = session ? session.title : "还没有会话";
-  els.activeMeta.textContent = session ? `${session.command} · ${session.cwd}` : "选择项目目录，启动一个 Claude agent";
+  els.activeMeta.textContent = session ? `${agentLabel(session.agent)} · ${session.command} · ${session.cwd}` : "选择项目目录，启动一个 agent";
   els.projectName.textContent = projectCwd ? basename(projectCwd) : "未选择";
+  els.agentName.textContent = session ? `${agentLabel(session.agent)} agent` : `${agentLabel(els.agentType.value)} agent`;
   els.inspectStatus.textContent = session?.status || "空闲";
   els.inspectCommand.textContent = session?.command || "-";
   els.inspectCwd.textContent = session?.cwd || "-";
@@ -221,7 +224,8 @@ function activate(sessionId) {
 
 async function refresh() {
   const health = await request("/api/health");
-  els.commandBadge.textContent = health.command ? basename(health.command) : "未找到";
+  const agents = health.agents || {};
+  els.commandBadge.textContent = `claude ${agents.claude ? "ok" : "miss"} · codex ${agents.codex ? "ok" : "miss"}`;
   state.sessions = await request("/api/sessions");
   if (state.activeId && !state.sessions.some((session) => session.id === state.activeId)) {
     state.activeId = null;
@@ -249,7 +253,7 @@ els.form.addEventListener("submit", async (event) => {
   const cwd = els.cwd.value.trim();
   localStorage.setItem(CWD_STORAGE_KEY, cwd);
 
-  const existing = state.sessions.find((session) => session.status !== "exited" && session.cwd === cwd);
+  const existing = state.sessions.find((session) => session.status !== "exited" && session.cwd === cwd && (session.agent || "claude") === els.agentType.value);
   if (existing) {
     activate(existing.id);
     return;
@@ -264,7 +268,8 @@ els.form.addEventListener("submit", async (event) => {
       method: "POST",
       body: JSON.stringify({
         cwd,
-        title: basename(cwd) || "Claude",
+        agent: els.agentType.value,
+        title: basename(cwd) || agentLabel(els.agentType.value),
         prompt: els.prompt.value,
         cols: 120,
         rows: 36
@@ -996,11 +1001,16 @@ function sessionStatusLabel(session) {
   return session.exitCode === null ? session.status : `code ${session.exitCode}`;
 }
 
+function agentLabel(agent) {
+  return String(agent || "claude").toLowerCase() === "codex" ? "Codex" : "Claude";
+}
+
 function currentStatusText(session) {
   if (!session) return "空闲";
   const queueText = session.queueLength ? `，队列 ${session.queueLength} 条` : "";
-  if (session.busy) return `Claude 正在处理${queueText}`;
-  if (session.status === "ready") return session.providerSessionId ? "可继续之前的 Claude 会话" : "等待输入";
+  const label = agentLabel(session.agent);
+  if (session.busy) return `${label} 正在处理${queueText}`;
+  if (session.status === "ready") return session.providerSessionId ? `可继续之前的 ${label} 会话` : "等待输入";
   const statusEvent = [...(session.events || [])].reverse().find((event) => event.type === "status");
   if (statusEvent?.text) return statusEvent.text;
   return session.status === "running" ? "等待输入" : "已结束";

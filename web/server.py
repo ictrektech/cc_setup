@@ -259,8 +259,11 @@ def language_for(path):
     }.get(suffix, "text")
 
 
-def resolve_command():
-    candidates = [os.environ.get("CLAUDE_BIN"), "claude"]
+def resolve_command(agent="claude"):
+    if agent == "codex":
+        candidates = [os.environ.get("CODEX_BIN"), "codex"]
+    else:
+        candidates = [os.environ.get("CLAUDE_BIN"), "claude"]
     for candidate in [item for item in candidates if item]:
         expanded = os.path.expanduser(candidate)
         if "/" in expanded and os.path.exists(expanded):
@@ -280,6 +283,13 @@ def resolve_command():
         except Exception:
             pass
     return None
+
+
+def available_agents():
+    return {
+        "claude": resolve_command("claude"),
+        "codex": resolve_command("codex"),
+    }
 
 
 def shell_quote(value):
@@ -384,12 +394,13 @@ class WsClient:
 
 
 class Session:
-    def __init__(self, title, cwd, command, args, cols, rows, saved=None):
+    def __init__(self, title, cwd, command, args, cols, rows, saved=None, agent="claude"):
         saved = saved or {}
         self.id = str(saved.get("id") or uuid.uuid4())
         self.title = title
         self.cwd = cwd
         self.command = command
+        self.agent = str(saved.get("agent") or agent or "claude")
         self.status = str(saved.get("status") or "running")
         self.created_at = str(saved.get("createdAt") or iso_now())
         self.last_output_at = saved.get("lastOutputAt")
@@ -404,24 +415,30 @@ class Session:
         self.prompt_queue = deque()
         self.provider_session_id = saved.get("providerSessionId")
         if not saved:
-            self.add_event("system", "房间已就绪。Claude 将以结构化 Agent 模式运行，工具调用、执行状态和回答会分开显示。")
+            self.add_event("system", f"房间已就绪。{self.agent_label()} 将以结构化 Agent 模式运行，工具调用、执行状态和回答会分开显示。")
         if args:
             self.start_pty(args, cols, rows)
 
     @classmethod
     def from_saved(cls, data, command):
+        agent = str(data.get("agent") or "claude")
         status = data.get("status")
         saved = {**data, "status": "ready" if status == "running" else (status or "ready")}
         saved["busy"] = False
+        restored_command = resolve_command(agent) or command or str(data.get("command") or agent)
         return cls(
             str(data.get("title") or Path(str(data.get("cwd") or "")).name or "Claude"),
             normalize_cwd(data.get("cwd")),
-            command or str(data.get("command") or "claude"),
+            restored_command,
             [],
             120,
             34,
             saved=saved,
+            agent=agent,
         )
+
+    def agent_label(self):
+        return "Codex" if self.agent == "codex" else "Claude"
 
     def serialize(self):
         return {
@@ -429,6 +446,7 @@ class Session:
             "title": self.title,
             "cwd": self.cwd,
             "command": self.command,
+            "agent": self.agent,
             "status": self.status,
             "createdAt": self.created_at,
             "lastOutputAt": self.last_output_at,
@@ -536,6 +554,12 @@ class Session:
         threading.Thread(target=self.run_prompt, args=(prompt,), daemon=True).start()
 
     def run_prompt(self, prompt, include_partial=True, fallback_attempted=False):
+        if self.agent == "codex":
+            self.run_codex_prompt(prompt)
+            return
+        self.run_claude_prompt(prompt, include_partial, fallback_attempted)
+
+    def run_claude_prompt(self, prompt, include_partial=True, fallback_attempted=False):
         prompt = prompt.strip()
         if not prompt:
             return
@@ -724,6 +748,207 @@ class Session:
                 self.broadcast_session()
                 threading.Thread(target=self.run_prompt, args=(next_prompt,), daemon=True).start()
 
+    def run_codex_prompt(self, prompt):
+        prompt = prompt.strip()
+        if not prompt:
+            return
+
+        self.busy = True
+        self.broadcast_session()
+        self.add_status("Codex 正在启动...")
+        timeout_seconds = int(os.environ.get("CODEX_RUN_TIMEOUT", os.environ.get("AGENT_RUN_TIMEOUT", "600")))
+        try:
+            if self.provider_session_id:
+                command_args = [
+                    self.command,
+                    "exec",
+                    "resume",
+                    "--json",
+                    "--dangerously-bypass-approvals-and-sandbox",
+                    self.provider_session_id,
+                    prompt,
+                ]
+            else:
+                command_args = [
+                    self.command,
+                    "exec",
+                    "--json",
+                    "--dangerously-bypass-approvals-and-sandbox",
+                    "-C",
+                    self.cwd,
+                    prompt,
+                ]
+
+            self.worker_proc = subprocess.Popen(
+                command_args,
+                cwd=self.cwd,
+                stdin=subprocess.DEVNULL,
+                stdout=subprocess.PIPE,
+                stderr=subprocess.STDOUT,
+                text=True,
+                bufsize=1,
+                env={**os.environ, "TERM": "dumb", "NO_COLOR": "1"},
+                preexec_fn=os.setsid if hasattr(os, "setsid") else None,
+            )
+            timed_out = False
+
+            def kill_on_timeout():
+                nonlocal timed_out
+                if self.worker_proc and self.worker_proc.poll() is None:
+                    timed_out = True
+                    queued = len(self.prompt_queue)
+                    suffix = f"队列中还有 {queued} 条，停止后会自动继续。" if queued else "没有排队消息。"
+                    self.add_event("system", f"Codex 运行超过 {timeout_seconds} 秒，已自动停止当前轮。{suffix}")
+                    self.broadcast_session()
+                    terminate_process_group(self.worker_proc)
+
+            timer = threading.Timer(timeout_seconds, kill_on_timeout)
+            timer.daemon = True
+            timer.start()
+            raw_tail = deque(maxlen=8)
+            seen = set()
+            active_stream_id = None
+            self.add_status("等待 Codex 响应...")
+            for line in self.worker_proc.stdout or []:
+                self.last_output_at = iso_now()
+                self.buffer.append(line)
+                raw_tail.append(line.strip())
+                self.broadcast({"type": "output", "data": line})
+                try:
+                    event = json.loads(line)
+                except json.JSONDecodeError:
+                    clean = line.strip()
+                    if clean and not clean.startswith("Reading additional input"):
+                        self.add_status(clean[:180])
+                    continue
+                active_stream_id = self.handle_codex_event(event, seen, active_stream_id)
+
+            code = self.worker_proc.wait()
+            timer.cancel()
+            if active_stream_id:
+                self.broadcast({"type": "assistant_done", "streamId": active_stream_id})
+            if code != 0 and not timed_out:
+                detail = next((line for line in reversed(raw_tail) if line), "")
+                suffix = f"\n{detail}" if detail else ""
+                self.add_event("system", f"Codex 进程退出码：{code}{suffix}")
+            elif code == 0 and not timed_out:
+                self.add_status("完成。")
+        except Exception as exc:
+            self.add_event("system", f"Codex 启动失败：{exc}")
+        finally:
+            self.worker_proc = None
+            self.busy = False
+            if self.status == "running":
+                self.status = "ready"
+            self.broadcast_session()
+            if self.status in {"running", "ready"} and self.prompt_queue:
+                next_prompt = self.prompt_queue.popleft()
+                self.status = "running"
+                self.add_status(f"开始处理排队消息，剩余 {len(self.prompt_queue)} 条。")
+                self.broadcast_session()
+                threading.Thread(target=self.run_prompt, args=(next_prompt,), daemon=True).start()
+
+    def handle_codex_event(self, event, seen, active_stream_id):
+        event_type = str(event.get("type") or "")
+        if event_type == "thread.started":
+            thread_id = event.get("thread_id")
+            if thread_id and not self.provider_session_id:
+                self.provider_session_id = thread_id
+                self.broadcast_session()
+                self.add_status("Codex 会话已建立。")
+            return active_stream_id
+        if event_type == "turn.started":
+            self.add_status("Codex 已收到任务，正在请求模型...")
+            return active_stream_id
+        if event_type == "turn.failed":
+            err = event.get("error") or {}
+            self.add_event("system", err.get("message") if isinstance(err, dict) else str(err))
+            return active_stream_id
+        if event_type == "error":
+            message = str(event.get("message") or "Codex 执行失败。")
+            self.add_event("system", message)
+            return active_stream_id
+
+        delta = self.extract_codex_delta(event)
+        if delta:
+            if not active_stream_id:
+                active_stream_id = str(uuid.uuid4())
+                self.broadcast({"type": "assistant_start", "streamId": active_stream_id})
+            self.broadcast({"type": "assistant_delta", "streamId": active_stream_id, "text": delta})
+            return active_stream_id
+
+        text = self.extract_codex_text(event)
+        if text and text not in seen:
+            seen.add(text)
+            if active_stream_id:
+                self.add_event("assistant", text, broadcast=False)
+                self.broadcast({"type": "assistant_replace", "text": text})
+                self.broadcast({"type": "assistant_done", "streamId": active_stream_id})
+                active_stream_id = None
+            else:
+                self.add_event("assistant", text)
+            return active_stream_id
+
+        status = self.extract_codex_status(event)
+        if status:
+            self.add_status(status)
+        return active_stream_id
+
+    def extract_codex_delta(self, event):
+        for key in ("delta", "text_delta", "content_delta"):
+            value = event.get(key)
+            if isinstance(value, str):
+                return value
+        item = event.get("item")
+        if isinstance(item, dict):
+            for key in ("delta", "text_delta", "content_delta"):
+                value = item.get(key)
+                if isinstance(value, str):
+                    return value
+        return ""
+
+    def extract_codex_text(self, event):
+        candidates = []
+        for obj in (event, event.get("item") if isinstance(event.get("item"), dict) else None):
+            if not isinstance(obj, dict):
+                continue
+            for key in ("text", "message", "content", "final_message", "answer"):
+                value = obj.get(key)
+                if isinstance(value, str):
+                    candidates.append(value)
+                elif isinstance(value, list):
+                    parts = []
+                    for part in value:
+                        if isinstance(part, str):
+                            parts.append(part)
+                        elif isinstance(part, dict) and isinstance(part.get("text"), str):
+                            parts.append(part["text"])
+                    if parts:
+                        candidates.append("\n".join(parts))
+        for text in candidates:
+            clean = text.strip()
+            if clean and not clean.startswith("Model metadata for"):
+                return clean
+        return ""
+
+    def extract_codex_status(self, event):
+        event_type = str(event.get("type") or "")
+        item = event.get("item") if isinstance(event.get("item"), dict) else {}
+        item_type = str(item.get("type") or "")
+        if event_type == "item.completed":
+            if item_type == "error":
+                return str(item.get("message") or "Codex 返回错误。")
+            if "command" in item_type or item.get("command"):
+                return f"Codex 已执行命令：{item.get('command') or item_type}"
+            if item_type:
+                return f"Codex 完成步骤：{item_type}"
+        if event_type == "item.started":
+            if item.get("command"):
+                return f"Codex 正在执行命令：{item.get('command')}"
+            if item_type:
+                return f"Codex 正在执行步骤：{item_type}"
+        return ""
+
 
     def broadcast(self, payload):
         dead = []
@@ -806,7 +1031,8 @@ class Handler(http.server.SimpleHTTPRequestHandler):
     def do_GET(self):
         parsed = urlparse(self.path)
         if parsed.path == "/api/health":
-            return json_response(self, 200, {"ok": True, "command": resolve_command(), "cwd": os.getcwd()})
+            agents = available_agents()
+            return json_response(self, 200, {"ok": True, "command": agents.get("claude"), "agents": agents, "cwd": os.getcwd()})
         if parsed.path == "/api/sessions":
             with sessions_lock:
                 data = [session.serialize() for session in sessions.values()]
@@ -935,12 +1161,16 @@ class Handler(http.server.SimpleHTTPRequestHandler):
         return json_response(self, 404, {"error": "not found"})
 
     def create_session(self):
-        command = resolve_command()
-        if not command:
-            return json_response(self, 400, {"error": "未找到 claude。可用 CLAUDE_BIN=/path/to/claude bash dev.sh 指定。"})
         body = read_json(self)
+        agent = str(body.get("agent") or "claude").strip().lower()
+        if agent not in {"claude", "codex"}:
+            return json_response(self, 400, {"error": "agent 只能是 claude 或 codex"})
+        command = resolve_command(agent)
+        if not command:
+            env_name = "CODEX_BIN" if agent == "codex" else "CLAUDE_BIN"
+            return json_response(self, 400, {"error": f"未找到 {agent}。可用 {env_name}=/path/to/{agent} bash dev.sh 指定。"})
         cwd = normalize_cwd(body.get("cwd"))
-        title = str(body.get("title") or Path(cwd).name or "Claude").strip()
+        title = str(body.get("title") or Path(cwd).name or agent.title()).strip()
         args = [str(item) for item in body.get("args", []) if str(item)]
         if not args:
             args = []
@@ -948,7 +1178,7 @@ class Handler(http.server.SimpleHTTPRequestHandler):
         rows = int(body.get("rows", 34))
         prompt = str(body.get("prompt") or "").strip()
         try:
-            session = Session(title, cwd, command, args, cols, rows)
+            session = Session(title, cwd, command, args, cols, rows, agent=agent)
         except Exception as exc:
             return json_response(self, 500, {"error": f"启动失败：{exc}", "command": command, "cwd": cwd})
         with sessions_lock:
