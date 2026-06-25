@@ -28,6 +28,7 @@ const els = {
   rawTab: document.querySelector("#rawTab"),
   fileTabs: document.querySelector("#fileTabs"),
   themeBtn: document.querySelector("#themeBtn"),
+  logoutBtn: document.querySelector("#logoutBtn"),
   runStatus: document.querySelector("#runStatus"),
   composer: document.querySelector("#composer"),
   message: document.querySelector("#message"),
@@ -323,6 +324,8 @@ els.rawTab.addEventListener("click", () => {
 els.themeBtn.addEventListener("click", () => {
   setTheme(document.documentElement.dataset.theme === "light" ? "dark" : "light");
 });
+
+els.logoutBtn.addEventListener("click", logout);
 
 els.stream.addEventListener("keydown", handlePtyKeys);
 els.terminal.addEventListener("keydown", handlePtyKeys);
@@ -1147,6 +1150,18 @@ function setTheme(theme) {
   document.documentElement.dataset.theme = theme;
   localStorage.setItem(THEME_STORAGE_KEY, theme);
   if (els.themeBtn) els.themeBtn.textContent = theme === "light" ? "深色" : "浅色";
+}
+
+async function logout() {
+  els.logoutBtn.disabled = true;
+  try {
+    await request("/api/logout", { method: "POST" });
+  } catch {
+    // Even if the session already expired, send the user back to the login screen.
+  } finally {
+    if (state.socket) state.socket.close();
+    location.href = "/login";
+  }
 }
 
 function classifyOutput(text) {

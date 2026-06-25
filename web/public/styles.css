@@ -325,6 +325,10 @@ h1 {
   gap: 8px;
 }
 
+.logout-button {
+  color: var(--muted);
+}
+
 .stats div {
   padding: 8px 10px;
   background: var(--panel-solid);
