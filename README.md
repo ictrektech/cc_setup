@@ -229,16 +229,26 @@ CLAUDE_BIN=claude-haha python3 -m digital_worker.runner full \
 
 ## Agent Room Web 控制台
 
-仓库里提供了一个本地 Web 控制台，可启动和管理当前机器上的 Claude / Codex agent 会话。
+仓库里提供了一个本地 Web 控制台，可启动和管理当前机器上的 Claude / Codex agent 会话，并提供 Git 工作区、文件树和文本编辑器。
 
 ![Agent Room Web 控制台](docs/images/agent-room.jpg)
+
+Token 登录页：
+
+![Agent Room token 登录](docs/images/agent-room-login.png)
+
+左侧 Files 面板：
+
+![Agent Room Files 面板](docs/images/agent-room-files.png)
+
+### 启动
 
 ```bash
 cd web
 bash dev.sh
 ```
 
-默认端口：
+默认打开：
 
 ```text
 http://localhost:3766
@@ -256,19 +266,58 @@ http://<远端 IP>:3766
 cat ~/.agentroom/token
 ```
 
-也可以用服务端脚本查询：
+也可以用服务端脚本查询，适合知道安装路径时使用：
 
 ```bash
-python3 /path/to/agentroom/server.py token
+python3 /home/jhu/dev/repos/agentroom/server.py token
 ```
 
-常用环境变量：
+### 配置
+
+常用启动配置：
 
 ```bash
 CLAUDE_BIN=/data/jhu/dev/bin/claude CODEX_BIN=/home/jhu/.local/npm/bin/codex PORT=3766 bash dev.sh
 ```
 
-当前功能：
+支持的环境变量：
+
+| 变量 | 默认值 | 说明 |
+| --- | --- | --- |
+| `PORT` | `3766` | Web 服务监听端口 |
+| `CLAUDE_BIN` | `claude` | Claude CLI 路径或命令名 |
+| `CODEX_BIN` | `codex` | Codex CLI 路径或命令名 |
+| `CLAUDE_RUN_TIMEOUT` | `600` | Claude 单轮任务超时时间，单位秒 |
+| `CODEX_RUN_TIMEOUT` | `600` | Codex 单轮任务超时时间，单位秒 |
+| `AGENTROOM_AUTH_DIR` | `~/.agentroom` | token 和 session secret 保存目录 |
+| `AGENTROOM_TOKEN` | 空 | 直接指定登录 token；为空时读取或生成 `~/.agentroom/token` |
+| `AGENTROOM_TOKEN_PATH` | `~/.agentroom/token` | token 文件路径 |
+| `AGENTROOM_AUTH_MAX_AGE` | `604800` | 登录 cookie 有效期，单位秒 |
+| `AGENTROOM_SESSIONS_PATH` | `web/.agentroom_sessions.json` | Agent Room 会话恢复文件 |
+
+认证相关文件：
+
+```text
+~/.agentroom/token
+~/.agentroom/session_secret
+```
+
+这两个文件会自动生成，权限为当前启动用户可读写。Webapp 不验证 Linux 密码，只验证 token；能读取启动用户 `~/.agentroom/token` 的人才能登录。
+
+远端后台启动示例：
+
+```bash
+cd /home/jhu/dev/repos/agentroom
+setsid env \
+  CLAUDE_BIN=/data/jhu/dev/bin/claude \
+  CODEX_BIN=/home/jhu/.local/npm/bin/codex \
+  PORT=3766 \
+  CLAUDE_RUN_TIMEOUT=600 \
+  CODEX_RUN_TIMEOUT=120 \
+  bash dev.sh > /tmp/agentroom-3766.log 2>&1 < /dev/null &
+```
+
+### 当前功能
 
 - 默认启用 token 登录；只有能读取启动用户 `~/.agentroom/token` 的用户才能进入 Web 控制台。
 - 以项目目录和 agent 类型为单位创建 Agent Room，并在顶部显示运行中、已结束和总会话数。
