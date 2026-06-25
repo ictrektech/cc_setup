@@ -20,6 +20,71 @@ API_KEY="${CC_SWITCH_API_KEY:-${API_KEY:-dummy-keys}}"
 HAIKU_MODEL="volces/DeepSeek-V4-Flash"
 DEFAULT_MODEL="volces/GLM-5.1"
 INSTALL_RTK="${CC_SWITCH_INSTALL_RTK:-${INSTALL_RTK:-0}}"
+AGENT_TARGET="${CC_SWITCH_AGENT:-both}"
+
+CODEX_PROVIDER_ID="${CC_SWITCH_CODEX_PROVIDER_ID:-$PROVIDER_ID}"
+CODEX_PROVIDER_NAME="${CC_SWITCH_CODEX_PROVIDER_NAME:-$PROVIDER_NAME Codex}"
+CODEX_PROVIDER_KEY="${CC_SWITCH_CODEX_PROVIDER_KEY:-custom}"
+CODEX_API_BASE_URL="${CC_SWITCH_CODEX_API_BASE_URL:-${API_BASE_URL%/}/v1}"
+CODEX_API_KEY="${CC_SWITCH_CODEX_API_KEY:-$API_KEY}"
+CODEX_MODEL="${CC_SWITCH_CODEX_MODEL:-$DEFAULT_MODEL}"
+CODEX_WIRE_API="${CC_SWITCH_CODEX_WIRE_API:-responses}"
+
+CLAUDE_CODE_WAS_PRESENT=0
+CLAUDE_CODE_INSTALLED_BY_SCRIPT=0
+
+usage() {
+  cat <<'EOF'
+Usage: cc_switch_setup.sh [--agent claude|codex|both]
+
+Environment:
+  CC_SWITCH_AGENT=claude|codex|both
+  CC_SWITCH_API_KEY=your-key
+  CC_SWITCH_CODEX_API_KEY=your-codex-key
+  CC_SWITCH_INSTALL_RTK=1
+EOF
+}
+
+parse_args() {
+  while [ "$#" -gt 0 ]; do
+    case "$1" in
+      --agent)
+        [ "$#" -ge 2 ] || { err "--agent 需要参数：claude|codex|both"; exit 1; }
+        AGENT_TARGET="$2"
+        shift 2
+        ;;
+      --agent=*)
+        AGENT_TARGET="${1#--agent=}"
+        shift
+        ;;
+      -h|--help)
+        usage
+        exit 0
+        ;;
+      *)
+        err "未知参数：$1"
+        usage >&2
+        exit 1
+        ;;
+    esac
+  done
+
+  case "$AGENT_TARGET" in
+    claude|codex|both) ;;
+    *)
+      err "无效 agent：$AGENT_TARGET，只支持 claude、codex、both。"
+      exit 1
+      ;;
+  esac
+}
+
+wants_claude() {
+  [ "$AGENT_TARGET" = "claude" ] || [ "$AGENT_TARGET" = "both" ]
+}
+
+wants_codex() {
+  [ "$AGENT_TARGET" = "codex" ] || [ "$AGENT_TARGET" = "both" ]
+}
 
 OS_TYPE="linux"
 if [ "$(uname -s)" = "Darwin" ]; then
@@ -162,7 +227,7 @@ ensure_local_bin_in_path() {
 
 setup_user_npm_prefix() {
   mkdir -p "$HOME/.local/bin" "$HOME/.local/npm" "$HOME/.local/node"
-  export PATH="$HOME/.local/node/bin:$HOME/.local/npm/bin:$HOME/.local/bin:$PATH"
+  export PATH="$HOME/.local/node/bin:$HOME/.local/npm/bin:$HOME/.local/bin:/data/$USER/dev/bin:/data/jhu/dev/bin:$PATH"
   export NPM_CONFIG_PREFIX="$HOME/.local/npm"
 
   if need_cmd npm; then
@@ -487,19 +552,19 @@ has_official_claude_code() {
   [ -n "$claude_path" ] || return 1
   claude_path_looks_like_cc_haha "$claude_path" && return 1
 
+  case "$claude_path" in
+    /data/*/dev/bin/claude|*/node_modules/@anthropic-ai/claude-code/*|*/.npm-global/bin/claude|*/.local/npm/bin/claude|*/npm/bin/claude)
+      return 0
+      ;;
+  esac
+
   if need_cmd npm && npm list -g @anthropic-ai/claude-code --depth=0 >/dev/null 2>&1; then
     return 0
   fi
 
-  if "$claude_path" --version 2>/dev/null | grep -qiE 'claude code|anthropic'; then
+  if timeout 5 "$claude_path" --version 2>/dev/null | grep -qiE 'claude code|anthropic'; then
     return 0
   fi
-
-  case "$claude_path" in
-    */node_modules/@anthropic-ai/claude-code/*|*/.npm-global/bin/claude|*/.local/npm/bin/claude|*/npm/bin/claude)
-      return 0
-      ;;
-  esac
 
   return 1
 }
@@ -538,6 +603,7 @@ install_claude_code_if_needed() {
 
   if has_official_claude_code "$claude_path"; then
     log "官方 Claude Code 已存在，跳过安装。"
+    CLAUDE_CODE_WAS_PRESENT=1
     return 0
   fi
 
@@ -553,7 +619,29 @@ install_claude_code_if_needed() {
     exit 1
   fi
 
+  CLAUDE_CODE_INSTALLED_BY_SCRIPT=1
   log "Claude Code 安装完成：$(command -v claude)"
+}
+
+install_codex_if_needed() {
+  if need_cmd codex; then
+    log "Codex CLI 已存在：$(command -v codex)"
+    return 0
+  fi
+
+  setup_user_npm_prefix
+
+  log "安装 Codex CLI 到用户目录：npm install -g @openai/codex"
+  npm install -g @openai/codex
+
+  hash -r 2>/dev/null || true
+
+  if ! need_cmd codex; then
+    err "Codex CLI 安装后未找到 codex 命令，请检查 ~/.local/npm/bin 是否在 PATH 中。"
+    exit 1
+  fi
+
+  log "Codex CLI 安装完成：$(command -v codex)"
 }
 
 install_cc_switch_if_needed() {
@@ -663,6 +751,9 @@ API_BASE_URL="https://ai.ictrek.com"
 API_KEY="dummy-keys"
 HAIKU_MODEL="volces/DeepSeek-V4-Flash"
 DEFAULT_MODEL="volces/GLM-5.1"
+CODEX_API_BASE_URL="https://ai.ictrek.com/v1"
+CODEX_API_KEY="dummy-keys"
+CODEX_MODEL="volces/GLM-5.1"
 
 log() { echo -e "\033[1;32m[INFO]\033[0m $*"; }
 warn() { echo -e "\033[1;33m[WARN]\033[0m $*"; }
@@ -706,13 +797,14 @@ if not db_path.exists():
 
 provider_id = os.environ["PROVIDER_ID"]
 with sqlite3.connect(db_path) as conn:
-    current = conn.execute(
-        "SELECT is_current FROM providers WHERE id = ? AND app_type = 'claude'",
-        (provider_id,),
-    ).fetchone()
-    conn.execute("DELETE FROM providers WHERE id = ? AND app_type = 'claude'", (provider_id,))
-    if current and current[0]:
-        conn.execute("UPDATE providers SET is_current = 0 WHERE app_type = 'claude'")
+    for app_type in ("claude", "codex"):
+        current = conn.execute(
+            "SELECT is_current FROM providers WHERE id = ? AND app_type = ?",
+            (provider_id, app_type),
+        ).fetchone()
+        conn.execute("DELETE FROM providers WHERE id = ? AND app_type = ?", (provider_id, app_type))
+        if current and current[0]:
+            conn.execute("UPDATE providers SET is_current = 0 WHERE app_type = ?", (app_type,))
     conn.commit()
 
 print(db_path)
@@ -836,6 +928,36 @@ if plugin_config.get("primaryApiKey") == "any":
 PY
 }
 
+clean_codex_config() {
+  CODEX_API_BASE_URL="$CODEX_API_BASE_URL" \
+  CODEX_API_KEY="$CODEX_API_KEY" \
+  CODEX_MODEL="$CODEX_MODEL" \
+  python3 - <<'PY'
+import json
+import os
+from pathlib import Path
+
+codex_dir = Path.home() / ".codex"
+config_path = codex_dir / "config.toml"
+auth_path = codex_dir / "auth.json"
+
+if auth_path.exists():
+    try:
+        auth = json.loads(auth_path.read_text(encoding="utf-8"))
+    except Exception:
+        auth = None
+    if isinstance(auth, dict) and auth.get("OPENAI_API_KEY") == os.environ["CODEX_API_KEY"]:
+        auth_path.unlink()
+        print(auth_path)
+
+if config_path.exists():
+    text = config_path.read_text(encoding="utf-8", errors="ignore")
+    if os.environ["CODEX_API_BASE_URL"] in text and os.environ["CODEX_MODEL"] in text:
+        config_path.unlink()
+        print(config_path)
+PY
+}
+
 uninstall_claude_code() {
   export PATH="$HOME/.local/node/bin:$HOME/.local/npm/bin:$HOME/.local/bin:$PATH"
   export NPM_CONFIG_PREFIX="$HOME/.local/npm"
@@ -853,12 +975,31 @@ uninstall_claude_code() {
   fi
 }
 
+uninstall_codex_cli() {
+  export PATH="$HOME/.local/node/bin:$HOME/.local/npm/bin:$HOME/.local/bin:$PATH"
+  export NPM_CONFIG_PREFIX="$HOME/.local/npm"
+
+  if ! need_cmd npm; then
+    warn "未检测到 npm，跳过 Codex CLI npm 包卸载。"
+    return 0
+  fi
+
+  if npm list -g @openai/codex --depth=0 >/dev/null 2>&1; then
+    log "卸载 Codex CLI npm 包。"
+    npm uninstall -g @openai/codex
+  else
+    warn "未检测到全局 @openai/codex，跳过 npm 卸载。"
+  fi
+}
+
 main() {
   disable_proxy_takeover || warn "关闭 cc-switch 代理接管失败，继续清理其它项目。"
   disable_claude_plugin_integration || warn "关闭 VS Code Claude 插件接管失败，继续清理其它项目。"
   remove_ictrek_provider || warn "移除 cc-switch provider 失败，继续清理其它项目。"
   clean_claude_settings || warn "清理 Claude settings 失败，继续清理其它项目。"
+  clean_codex_config || warn "清理 Codex config 失败，继续清理其它项目。"
   uninstall_claude_code || warn "卸载官方 Claude Code 失败。"
+  uninstall_codex_cli || warn "卸载 Codex CLI 失败。"
 
   remove_shell_block "$HOME/.bashrc"
   remove_shell_block "$HOME/.zshrc"
@@ -867,7 +1008,7 @@ main() {
 
   rm -f "$HOME/.local/bin/claude-update" "$HOME/.local/bin/claude-uninstall"
 
-  log "已卸载 cc-switch Claude 方案。"
+  log "已卸载 cc-switch 方案。"
   warn "未删除 cc-switch 本体和 ~/.cc-switch 其它配置，避免影响你已有的 provider。"
   warn "如当前 shell 缓存了命令，请执行：hash -r 2>/dev/null || true；fish 请重新打开终端。"
 }
@@ -882,7 +1023,12 @@ EOF
 
 init_cc_switch_if_needed() {
   log "初始化 cc-switch 配置。"
-  cc-switch --app claude provider list >/dev/null 2>&1 || true
+  if wants_claude; then
+    cc-switch --app claude provider list >/dev/null 2>&1 || true
+  fi
+  if wants_codex; then
+    cc-switch --app codex provider list >/dev/null 2>&1 || true
+  fi
 }
 
 configure_cc_switch_provider() {
@@ -993,6 +1139,128 @@ PY
 
   log "切换 cc-switch provider 并同步 Claude settings。"
   cc-switch --app claude provider switch "$PROVIDER_ID"
+}
+
+configure_cc_switch_codex_provider() {
+  log "写入 cc-switch Codex provider：${CODEX_PROVIDER_NAME}。"
+
+  CODEX_PROVIDER_ID="$CODEX_PROVIDER_ID" \
+  CODEX_PROVIDER_NAME="$CODEX_PROVIDER_NAME" \
+  CODEX_PROVIDER_KEY="$CODEX_PROVIDER_KEY" \
+  CODEX_API_BASE_URL="$CODEX_API_BASE_URL" \
+  CODEX_API_KEY="$CODEX_API_KEY" \
+  CODEX_MODEL="$CODEX_MODEL" \
+  CODEX_WIRE_API="$CODEX_WIRE_API" \
+  python3 - <<'PY'
+import json
+import os
+import sqlite3
+import time
+from pathlib import Path
+
+home = Path.home()
+config_dir = Path(os.environ.get("CC_SWITCH_CONFIG_DIR") or home / ".cc-switch")
+db_path = config_dir / "cc-switch.db"
+
+if not db_path.exists():
+    raise SystemExit(f"cc-switch 数据库不存在：{db_path}")
+
+provider_id = os.environ["CODEX_PROVIDER_ID"]
+provider_name = os.environ["CODEX_PROVIDER_NAME"]
+provider_key = os.environ["CODEX_PROVIDER_KEY"]
+api_base_url = os.environ["CODEX_API_BASE_URL"].rstrip("/")
+api_key = os.environ["CODEX_API_KEY"]
+model = os.environ["CODEX_MODEL"]
+wire_api = os.environ["CODEX_WIRE_API"]
+now_ms = int(time.time() * 1000)
+
+def toml_escape(value: str) -> str:
+    return value.replace("\\", "\\\\").replace('"', '\\"')
+
+config_toml = "\n".join([
+    f'model_provider = "{toml_escape(provider_key)}"',
+    f'model = "{toml_escape(model)}"',
+    'model_reasoning_effort = "high"',
+    'disable_response_storage = true',
+    '',
+    f'[model_providers.{provider_key}]',
+    f'name = "{toml_escape(provider_key)}"',
+    f'base_url = "{toml_escape(api_base_url)}"',
+    f'wire_api = "{toml_escape(wire_api)}"',
+    'requires_openai_auth = true',
+    '',
+])
+
+settings_config = {
+    "auth": {
+        "OPENAI_API_KEY": api_key,
+    },
+    "config": config_toml,
+}
+
+meta = {
+    "apiFormat": "openai_responses",
+}
+
+with sqlite3.connect(db_path) as conn:
+    existing = conn.execute(
+        "SELECT created_at, sort_index, is_current, in_failover_queue FROM providers WHERE id = ? AND app_type = 'codex'",
+        (provider_id,),
+    ).fetchone()
+
+    if existing:
+        created_at, sort_index, is_current, in_failover_queue = existing
+    else:
+        created_at = now_ms
+        row = conn.execute("SELECT MAX(sort_index) FROM providers WHERE app_type = 'codex'").fetchone()
+        sort_index = 0 if row is None or row[0] is None else int(row[0]) + 1
+        is_current = 0
+        in_failover_queue = 0
+
+    conn.execute(
+        """
+        INSERT INTO providers (
+          id, app_type, name, settings_config, website_url, category,
+          created_at, sort_index, notes, icon, icon_color, meta,
+          is_current, in_failover_queue
+        )
+        VALUES (?, 'codex', ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        ON CONFLICT(id, app_type) DO UPDATE SET
+          name = excluded.name,
+          settings_config = excluded.settings_config,
+          website_url = excluded.website_url,
+          category = excluded.category,
+          created_at = excluded.created_at,
+          sort_index = excluded.sort_index,
+          notes = excluded.notes,
+          icon = excluded.icon,
+          icon_color = excluded.icon_color,
+          meta = excluded.meta,
+          in_failover_queue = excluded.in_failover_queue
+        """,
+        (
+            provider_id,
+            provider_name,
+            json.dumps(settings_config, ensure_ascii=False, separators=(",", ":")),
+            api_base_url,
+            "custom",
+            created_at,
+            sort_index,
+            "Installed by cc_switch_setup.sh",
+            "terminal",
+            "#10A37F",
+            json.dumps(meta, ensure_ascii=False, separators=(",", ":")),
+            is_current,
+            in_failover_queue,
+        ),
+    )
+    conn.commit()
+
+print(db_path)
+PY
+
+  log "切换 cc-switch Codex provider 并同步 Codex config。"
+  cc-switch --app codex provider switch "$CODEX_PROVIDER_ID"
 }
 
 enable_proxy_flags_direct() {
@@ -1123,22 +1391,38 @@ PY
 }
 
 main() {
+  parse_args "$@"
+
+  export PATH="/data/$USER/dev/bin:/data/jhu/dev/bin:$PATH"
   install_basic_tools_if_needed
   ensure_local_bin_in_path
-  maybe_install_rtk
+  if wants_claude; then
+    maybe_install_rtk
+  fi
   ensure_node_npm
-  uninstall_cc_haha_if_needed
-  install_claude_code_if_needed
+  if wants_claude; then
+    uninstall_cc_haha_if_needed
+    install_claude_code_if_needed
+  fi
+  if wants_codex; then
+    install_codex_if_needed
+  fi
   install_cc_switch_if_needed
   init_cc_switch_if_needed
-  configure_cc_switch_provider
-  enable_cc_switch_proxy_and_plugin
-  setup_claude_first_run_state
+  if wants_claude; then
+    configure_cc_switch_provider
+    enable_cc_switch_proxy_and_plugin
+    setup_claude_first_run_state
+  fi
+  if wants_codex; then
+    configure_cc_switch_codex_provider
+  fi
   write_management_scripts
 
-  log "完成。重新打开终端后可执行：claude"
+  log "完成。重新打开终端后可执行：claude / codex"
   log "管理命令：claude-update / claude-uninstall"
-  log "cc-switch provider：$PROVIDER_ID -> $API_BASE_URL"
+  log "Claude provider：$PROVIDER_ID -> $API_BASE_URL"
+  log "Codex provider：$CODEX_PROVIDER_ID -> $CODEX_API_BASE_URL"
 }
 
 main "$@"

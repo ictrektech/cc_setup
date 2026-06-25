@@ -6,14 +6,26 @@ Claude / RTK / skills / digital-workers 的一键安装脚本集合。
 
 这里提供两种互斥方案。推荐新机器优先使用 cc-switch 方案；如果已经在使用 cc-haha，可以继续使用 cc-haha 方案，或者运行 cc-switch 方案自动卸载 cc-haha 后切换。
 
-### 方案一：cc-switch + 官方 Claude Code（macOS / Linux）
+### 方案一：cc-switch + 官方 Claude Code / Codex（macOS / Linux）
 
-这个方案安装官方 `@anthropic-ai/claude-code`，安装 [saladday/cc-switch-cli](https://github.com/saladday/cc-switch-cli)，并自动配置 ICTrek provider。
+这个方案安装 [saladday/cc-switch-cli](https://github.com/saladday/cc-switch-cli)，可选择安装官方 `@anthropic-ai/claude-code`、`@openai/codex`，或两者都安装，并自动配置 ICTrek provider。
 
-安装：
+默认同时安装 Claude Code 和 Codex：
 
 ```bash
 bash <(curl -LfsS https://raw.githubusercontent.com/huluxiaohuowa/cc_setup/main/cc_switch_setup.sh || curl -LfsS https://ghfast.top/https://raw.githubusercontent.com/huluxiaohuowa/cc_setup/main/cc_switch_setup.sh)
+```
+
+只安装 Claude Code：
+
+```bash
+bash <(curl -LfsS https://raw.githubusercontent.com/huluxiaohuowa/cc_setup/main/cc_switch_setup.sh || curl -LfsS https://ghfast.top/https://raw.githubusercontent.com/huluxiaohuowa/cc_setup/main/cc_switch_setup.sh) --agent claude
+```
+
+只安装 Codex：
+
+```bash
+bash <(curl -LfsS https://raw.githubusercontent.com/huluxiaohuowa/cc_setup/main/cc_switch_setup.sh || curl -LfsS https://ghfast.top/https://raw.githubusercontent.com/huluxiaohuowa/cc_setup/main/cc_switch_setup.sh) --agent codex
 ```
 
 fish shell 可以执行：
@@ -22,20 +34,28 @@ fish shell 可以执行：
 bash -lc 'bash <(curl -LfsS https://raw.githubusercontent.com/huluxiaohuowa/cc_setup/main/cc_switch_setup.sh || curl -LfsS https://ghfast.top/https://raw.githubusercontent.com/huluxiaohuowa/cc_setup/main/cc_switch_setup.sh)'
 ```
 
-以上的安装过程会写入如下配置内容：
+以上的安装过程会按所选 agent 写入如下配置内容：
 
 ```text
-API 地址: https://ai.ictrek.com
+Claude API 地址: https://ai.ictrek.com
+Codex API 地址: https://ai.ictrek.com/v1
 API Key: dummy-keys（占位，安装后请改成自己的 key）
-Haiku 模型: volces/DeepSeek-V4-Flash
-Sonnet/Opus/默认模型: volces/GLM-5.1
+Claude Haiku 模型: volces/DeepSeek-V4-Flash
+Claude Sonnet/Opus/默认模型: volces/GLM-5.1
+Codex 模型: volces/GLM-5.1
 Provider ID: ictrek
 ```
 
-**十分建议**安装时直接写入自己的 API Key：
+**十分建议**安装时直接写入自己的 API Key。`CC_SWITCH_API_KEY` 会同时用于 Claude Code 和 Codex：
 
 ```bash
 CC_SWITCH_API_KEY="你的 API Key" bash <(curl -LfsS https://raw.githubusercontent.com/huluxiaohuowa/cc_setup/main/cc_switch_setup.sh || curl -LfsS https://ghfast.top/https://raw.githubusercontent.com/huluxiaohuowa/cc_setup/main/cc_switch_setup.sh)
+```
+
+如果 Codex 要使用单独的 key：
+
+```bash
+CC_SWITCH_API_KEY="Claude API Key" CC_SWITCH_CODEX_API_KEY="Codex API Key" bash <(curl -LfsS https://raw.githubusercontent.com/huluxiaohuowa/cc_setup/main/cc_switch_setup.sh || curl -LfsS https://ghfast.top/https://raw.githubusercontent.com/huluxiaohuowa/cc_setup/main/cc_switch_setup.sh)
 ```
 
 如果还希望方案一自动安装并初始化 RTK：
@@ -58,9 +78,15 @@ CC_SWITCH_API_KEY="你的 API Key" claude-update
 CC_SWITCH_API_KEY="你的 API Key" ~/.local/bin/claude-update
 ```
 
-这条命令会重新写入 cc-switch 的 `ictrek` provider，并同步 Claude 配置。
+这条命令会重新写入 cc-switch 的 `ictrek` provider，并同步所选 agent 的配置。也可以指定范围：
 
-脚本还会打开 Claude 代理接管和 VS Code Claude 插件接管，并关闭 Claude Code 首次打开登录/引导验证。
+```bash
+CC_SWITCH_API_KEY="你的 API Key" claude-update --agent claude
+CC_SWITCH_API_KEY="你的 API Key" claude-update --agent codex
+CC_SWITCH_API_KEY="你的 API Key" claude-update --agent both
+```
+
+如果系统里已经有官方 Claude Code，脚本会跳过 Claude Code 的重复 npm 安装，但选择 `--agent claude` 或 `--agent both` 时仍会写入并同步 cc-switch Claude provider。Claude 安装流程会打开 Claude 代理接管和 VS Code Claude 插件接管，并关闭 Claude Code 首次打开登录/引导验证。Codex 安装流程会通过 cc-switch 写入 NewAPI 兼容的 `model_provider` 配置，并同步到 `~/.codex/config.toml`。
 
 查看配置：
 
@@ -69,6 +95,9 @@ cc-switch --app claude provider current
 cc-switch --app claude proxy show
 claude --help
 claude -p "hello"
+cc-switch --app codex provider current
+codex --version
+codex
 ```
 
 更新：
@@ -83,7 +112,7 @@ claude-update
 claude-uninstall
 ```
 
-卸载会移除 `ictrek` provider、关闭 Claude 代理接管、关闭 VS Code Claude 插件接管、卸载官方 Claude Code npm 包，并删除本方案写入的 `claude-update` / `claude-uninstall`。它不会删除 cc-switch 本体和 `~/.cc-switch` 里的其它 provider。
+卸载会移除 `ictrek` provider、关闭 Claude 代理接管、关闭 VS Code Claude 插件接管、卸载官方 Claude Code 和 Codex npm 包，并删除本方案写入的 `claude-update` / `claude-uninstall`。它不会删除 cc-switch 本体和 `~/.cc-switch` 里的其它 provider。
 
 ### 方案二：cc-haha（macOS / Linux）
 
@@ -231,7 +260,7 @@ CLAUDE_BIN=/data/jhu/dev/bin/claude PORT=3766 bash dev.sh
 
 ## 脚本说明
 
-- `cc_switch_setup.sh`: macOS / Linux 安装官方 Claude Code 和 cc-switch-cli，配置 ICTrek provider，打开 Claude 代理接管和 VS Code Claude 插件接管，并写入 `claude-update`、`claude-uninstall`。
+- `cc_switch_setup.sh`: macOS / Linux 安装官方 Claude Code、Codex 和 cc-switch-cli，按 `--agent claude|codex|both` 配置 ICTrek provider，并写入 `claude-update`、`claude-uninstall`。
 - `cc_setup_unix.sh`: macOS / Linux 安装 Claude 环境、RTK，并写入 `claude`、`claude-env`、`claude-update`、`claude-uninstall`。
 - `cc_setup_win.ps1`: Windows PowerShell 安装 Claude 环境、RTK，并写入对应命令。
 - `dworkers_setup.sh`: 克隆/更新 `ictrektech/digital-workers`，重装 skills，生成 `.env` 和示例任务。
