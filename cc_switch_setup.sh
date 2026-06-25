@@ -688,7 +688,9 @@ install_cc_switch_if_needed() {
 write_management_scripts() {
   local bin_dir="$HOME/.local/bin"
   local update_script="$bin_dir/claude-update"
+  local codex_update_script="$bin_dir/codex-update"
   local uninstall_script="$bin_dir/claude-uninstall"
+  local codex_uninstall_script="$bin_dir/codex-uninstall"
 
   mkdir -p "$bin_dir"
 
@@ -726,7 +728,14 @@ download_nonempty() {
 
 main() {
   local tmp
+  local self_name default_agent
   tmp="$(mktemp)"
+  self_name="$(basename "$0")"
+  default_agent="both"
+  case "$self_name" in
+    claude-update) default_agent="claude" ;;
+    codex-update) default_agent="codex" ;;
+  esac
 
   log "拉取最新版 cc_switch_setup.sh 并重新执行安装/配置。"
   if ! download_nonempty "$SELF_SCRIPT_URL" "$SELF_SCRIPT_URL_FAST" "$tmp"; then
@@ -735,12 +744,18 @@ main() {
     exit 1
   fi
 
-  bash "$tmp" "$@"
+  if [ "$#" -eq 0 ]; then
+    bash "$tmp" --agent "$default_agent"
+  else
+    bash "$tmp" "$@"
+  fi
   rm -f "$tmp"
 }
 
 main "$@"
 EOF
+
+  cp "$update_script" "$codex_update_script"
 
   cat > "$uninstall_script" <<'EOF'
 #!/usr/bin/env bash
@@ -754,12 +769,60 @@ DEFAULT_MODEL="volces/GLM-5.1"
 CODEX_API_BASE_URL="https://ai.ictrek.com/v1"
 CODEX_API_KEY="dummy-keys"
 CODEX_MODEL="volces/GLM-5.1"
+AGENT_TARGET="both"
 
 log() { echo -e "\033[1;32m[INFO]\033[0m $*"; }
 warn() { echo -e "\033[1;33m[WARN]\033[0m $*"; }
 
 need_cmd() {
   command -v "$1" >/dev/null 2>&1
+}
+
+parse_args() {
+  local self_name
+  self_name="$(basename "$0")"
+  case "$self_name" in
+    claude-uninstall) AGENT_TARGET="claude" ;;
+    codex-uninstall) AGENT_TARGET="codex" ;;
+  esac
+
+  while [ "$#" -gt 0 ]; do
+    case "$1" in
+      --agent)
+        [ "$#" -ge 2 ] || { echo "ERR: --agent 需要参数：claude|codex|both" >&2; exit 1; }
+        AGENT_TARGET="$2"
+        shift 2
+        ;;
+      --agent=*)
+        AGENT_TARGET="${1#--agent=}"
+        shift
+        ;;
+      -h|--help)
+        echo "Usage: $(basename "$0") [--agent claude|codex|both]"
+        exit 0
+        ;;
+      *)
+        echo "ERR: 未知参数：$1" >&2
+        exit 1
+        ;;
+    esac
+  done
+
+  case "$AGENT_TARGET" in
+    claude|codex|both) ;;
+    *)
+      echo "ERR: 无效 agent：$AGENT_TARGET，只支持 claude、codex、both。" >&2
+      exit 1
+      ;;
+  esac
+}
+
+wants_claude() {
+  [ "$AGENT_TARGET" = "claude" ] || [ "$AGENT_TARGET" = "both" ]
+}
+
+wants_codex() {
+  [ "$AGENT_TARGET" = "codex" ] || [ "$AGENT_TARGET" = "both" ]
 }
 
 remove_shell_block() {
@@ -785,7 +848,9 @@ PY
 }
 
 remove_ictrek_provider() {
-  PROVIDER_ID="$PROVIDER_ID" python3 - <<'PY'
+  PROVIDER_ID="$PROVIDER_ID" \
+  AGENT_TARGET="$AGENT_TARGET" \
+  python3 - <<'PY'
 import os
 import sqlite3
 from pathlib import Path
@@ -796,8 +861,14 @@ if not db_path.exists():
     raise SystemExit(0)
 
 provider_id = os.environ["PROVIDER_ID"]
+agent_target = os.environ["AGENT_TARGET"]
+app_types = {
+    "claude": ("claude",),
+    "codex": ("codex",),
+    "both": ("claude", "codex"),
+}[agent_target]
 with sqlite3.connect(db_path) as conn:
-    for app_type in ("claude", "codex"):
+    for app_type in app_types:
         current = conn.execute(
             "SELECT is_current FROM providers WHERE id = ? AND app_type = ?",
             (provider_id, app_type),
@@ -993,22 +1064,37 @@ uninstall_codex_cli() {
 }
 
 main() {
-  disable_proxy_takeover || warn "关闭 cc-switch 代理接管失败，继续清理其它项目。"
-  disable_claude_plugin_integration || warn "关闭 VS Code Claude 插件接管失败，继续清理其它项目。"
+  parse_args "$@"
+
+  if wants_claude; then
+    disable_proxy_takeover || warn "关闭 cc-switch 代理接管失败，继续清理其它项目。"
+    disable_claude_plugin_integration || warn "关闭 VS Code Claude 插件接管失败，继续清理其它项目。"
+  fi
   remove_ictrek_provider || warn "移除 cc-switch provider 失败，继续清理其它项目。"
-  clean_claude_settings || warn "清理 Claude settings 失败，继续清理其它项目。"
-  clean_codex_config || warn "清理 Codex config 失败，继续清理其它项目。"
-  uninstall_claude_code || warn "卸载官方 Claude Code 失败。"
-  uninstall_codex_cli || warn "卸载 Codex CLI 失败。"
+  if wants_claude; then
+    clean_claude_settings || warn "清理 Claude settings 失败，继续清理其它项目。"
+    uninstall_claude_code || warn "卸载官方 Claude Code 失败。"
+  fi
+  if wants_codex; then
+    clean_codex_config || warn "清理 Codex config 失败，继续清理其它项目。"
+    uninstall_codex_cli || warn "卸载 Codex CLI 失败。"
+  fi
 
-  remove_shell_block "$HOME/.bashrc"
-  remove_shell_block "$HOME/.zshrc"
-  remove_shell_block "$HOME/.zprofile"
-  remove_shell_block "$HOME/.config/fish/config.fish"
+  if [ "$AGENT_TARGET" = "both" ]; then
+    remove_shell_block "$HOME/.bashrc"
+    remove_shell_block "$HOME/.zshrc"
+    remove_shell_block "$HOME/.zprofile"
+    remove_shell_block "$HOME/.config/fish/config.fish"
+  fi
 
-  rm -f "$HOME/.local/bin/claude-update" "$HOME/.local/bin/claude-uninstall"
+  if wants_claude; then
+    rm -f "$HOME/.local/bin/claude-update" "$HOME/.local/bin/claude-uninstall"
+  fi
+  if wants_codex; then
+    rm -f "$HOME/.local/bin/codex-update" "$HOME/.local/bin/codex-uninstall"
+  fi
 
-  log "已卸载 cc-switch 方案。"
+  log "已卸载 cc-switch ${AGENT_TARGET} 方案。"
   warn "未删除 cc-switch 本体和 ~/.cc-switch 其它配置，避免影响你已有的 provider。"
   warn "如当前 shell 缓存了命令，请执行：hash -r 2>/dev/null || true；fish 请重新打开终端。"
 }
@@ -1016,9 +1102,13 @@ main() {
 main "$@"
 EOF
 
-  chmod +x "$update_script" "$uninstall_script"
+  cp "$uninstall_script" "$codex_uninstall_script"
+
+  chmod +x "$update_script" "$codex_update_script" "$uninstall_script" "$codex_uninstall_script"
   log "claude-update 命令已写入：$update_script"
+  log "codex-update 命令已写入：$codex_update_script"
   log "claude-uninstall 命令已写入：$uninstall_script"
+  log "codex-uninstall 命令已写入：$codex_uninstall_script"
 }
 
 init_cc_switch_if_needed() {

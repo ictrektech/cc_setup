@@ -70,12 +70,14 @@ CC_SWITCH_API_KEY="你的 API Key" CC_SWITCH_INSTALL_RTK=1 bash <(curl -LfsS htt
 
 ```bash
 CC_SWITCH_API_KEY="你的 API Key" claude-update
+CC_SWITCH_API_KEY="你的 API Key" codex-update
 ```
 
 如果当前终端还没重新加载 PATH，可以执行：
 
 ```bash
 CC_SWITCH_API_KEY="你的 API Key" ~/.local/bin/claude-update
+CC_SWITCH_API_KEY="你的 API Key" ~/.local/bin/codex-update
 ```
 
 这条命令会重新写入 cc-switch 的 `ictrek` provider，并同步所选 agent 的配置。也可以指定范围：
@@ -84,7 +86,10 @@ CC_SWITCH_API_KEY="你的 API Key" ~/.local/bin/claude-update
 CC_SWITCH_API_KEY="你的 API Key" claude-update --agent claude
 CC_SWITCH_API_KEY="你的 API Key" claude-update --agent codex
 CC_SWITCH_API_KEY="你的 API Key" claude-update --agent both
+CC_SWITCH_API_KEY="你的 API Key" codex-update --agent both
 ```
+
+`claude-update` 默认只更新 Claude Code；`codex-update` 默认只更新 Codex。需要同时更新两边时使用 `--agent both`。
 
 如果系统里已经有官方 Claude Code，脚本会跳过 Claude Code 的重复 npm 安装，但选择 `--agent claude` 或 `--agent both` 时仍会写入并同步 cc-switch Claude provider。Claude 安装流程会打开 Claude 代理接管和 VS Code Claude 插件接管，并关闭 Claude Code 首次打开登录/引导验证。Codex 安装流程会通过 cc-switch 写入 NewAPI 兼容的 `model_provider` 配置，并同步到 `~/.codex/config.toml`。
 
@@ -104,15 +109,23 @@ codex
 
 ```bash
 claude-update
+codex-update
 ```
 
 卸载：
 
 ```bash
 claude-uninstall
+codex-uninstall
 ```
 
-卸载会移除 `ictrek` provider、关闭 Claude 代理接管、关闭 VS Code Claude 插件接管、卸载官方 Claude Code 和 Codex npm 包，并删除本方案写入的 `claude-update` / `claude-uninstall`。它不会删除 cc-switch 本体和 `~/.cc-switch` 里的其它 provider。
+`claude-uninstall` 默认只卸载 Claude Code 相关内容；`codex-uninstall` 默认只卸载 Codex 相关内容。需要同时卸载两边时执行：
+
+```bash
+claude-uninstall --agent both
+```
+
+卸载会移除对应 agent 的 `ictrek` provider；Claude 卸载会关闭 Claude 代理接管和 VS Code Claude 插件接管，并卸载官方 Claude Code npm 包；Codex 卸载会清理本方案写入的 Codex 配置并卸载 Codex npm 包。它不会删除 cc-switch 本体和 `~/.cc-switch` 里的其它 provider。
 
 ### 方案二：cc-haha（macOS / Linux）
 
@@ -260,7 +273,7 @@ CLAUDE_BIN=/data/jhu/dev/bin/claude PORT=3766 bash dev.sh
 
 ## 脚本说明
 
-- `cc_switch_setup.sh`: macOS / Linux 安装官方 Claude Code、Codex 和 cc-switch-cli，按 `--agent claude|codex|both` 配置 ICTrek provider，并写入 `claude-update`、`claude-uninstall`。
+- `cc_switch_setup.sh`: macOS / Linux 安装官方 Claude Code、Codex 和 cc-switch-cli，按 `--agent claude|codex|both` 配置 ICTrek provider，并写入 `claude-update`、`codex-update`、`claude-uninstall`、`codex-uninstall`。
 - `cc_setup_unix.sh`: macOS / Linux 安装 Claude 环境、RTK，并写入 `claude`、`claude-env`、`claude-update`、`claude-uninstall`。
 - `cc_setup_win.ps1`: Windows PowerShell 安装 Claude 环境、RTK，并写入对应命令。
 - `dworkers_setup.sh`: 克隆/更新 `ictrektech/digital-workers`，重装 skills，生成 `.env` 和示例任务。
