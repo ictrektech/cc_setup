@@ -188,11 +188,7 @@ CLAUDE_BIN=claude python3 -m digital_worker.runner full \
 
 ![Agent Room Web 控制台](docs/images/agent-room.jpg)
 
-完整部署说明、配置项、界面功能介绍和使用教程见：
-
-```text
-web/README.md
-```
+完整部署说明、配置项、界面功能介绍和使用教程见：[web/README.md](web/README.md)。
 
 主要能力：
 
