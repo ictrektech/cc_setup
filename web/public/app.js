@@ -80,6 +80,10 @@ async function request(path, options = {}) {
     ...options
   });
   const data = await response.json().catch(() => ({}));
+  if (response.status === 401) {
+    location.href = "/login";
+    throw new Error(data.error || "需要登录");
+  }
   if (!response.ok) throw new Error(data.error || response.statusText);
   return data;
 }

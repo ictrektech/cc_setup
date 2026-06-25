@@ -250,6 +250,18 @@ http://localhost:3766
 http://<远端 IP>:3766
 ```
 
+首次打开需要输入访问 token。启动服务的 Linux 用户可以在任意目录运行：
+
+```bash
+cat ~/.agentroom/token
+```
+
+也可以用服务端脚本查询：
+
+```bash
+python3 /path/to/agentroom/server.py token
+```
+
 常用环境变量：
 
 ```bash
@@ -258,6 +270,7 @@ CLAUDE_BIN=/data/jhu/dev/bin/claude CODEX_BIN=/home/jhu/.local/npm/bin/codex POR
 
 当前功能：
 
+- 默认启用 token 登录；只有能读取启动用户 `~/.agentroom/token` 的用户才能进入 Web 控制台。
 - 以项目目录和 agent 类型为单位创建 Agent Room，并在顶部显示运行中、已结束和总会话数。
 - 支持 Claude 和 Codex 两种 agent；新建房间时可选择 agent 类型，房间会保存对应的 provider session/thread id。
 - 使用 `claude -p --verbose --output-format stream-json --include-partial-messages` 运行任务，主对话窗口按 Claude 的真实 `content_block_delta` 流式输出。

@@ -17,6 +17,18 @@ bash dev.sh
 http://localhost:3766
 ```
 
+首次打开需要输入访问 token。启动服务的 Linux 用户可以在任意目录运行：
+
+```bash
+cat ~/.agentroom/token
+```
+
+也可以用服务脚本查询：
+
+```bash
+python3 /path/to/agentroom/server.py token
+```
+
 如果你的命令不在 PATH 里，可以指定：
 
 ```bash
@@ -26,6 +38,7 @@ CLAUDE_BIN=/Users/you/.local/bin/claude CODEX_BIN=/Users/you/.local/bin/codex ba
 ## 当前功能
 
 - 选择工作目录和 agent 类型，并启动 Claude 或 Codex agent。
+- 默认启用 token 登录；只有能读取启动用户 `~/.agentroom/token` 的用户才能进入 Web 控制台。
 - 可输入初始任务，也可以启动后继续发送消息。
 - 使用 `claude -p --verbose --output-format stream-json --include-partial-messages` 运行任务。
 - 使用 `codex exec --json` 和 `codex exec resume --json` 运行 Codex 任务。

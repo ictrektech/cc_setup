@@ -148,15 +148,13 @@ label {
 
 .rail {
   height: 100vh;
-  padding: 16px 16px 18px;
+  padding: 12px;
   display: grid;
-  grid-template-rows: auto auto auto minmax(360px, 1fr);
-  gap: 12px;
+  grid-template-rows: auto auto auto minmax(240px, 1fr);
+  gap: 8px;
   border-width: 0 1px 0 0;
   background: var(--rail);
-  overflow-x: hidden;
-  overflow-y: auto;
-  overscroll-behavior: contain;
+  overflow: hidden;
 }
 
 .brand {
@@ -199,16 +197,17 @@ dt,
 }
 
 .panel {
-  padding: 10px;
+  padding: 8px;
 }
 
 .launch {
-  gap: 9px;
+  gap: 7px;
 }
 
 .launch textarea {
-  min-height: 54px;
-  max-height: 68px;
+  min-height: 48px;
+  max-height: 52px;
+  resize: none;
 }
 
 .panel-head,
@@ -227,7 +226,7 @@ dt,
 }
 
 .panel-head {
-  margin-bottom: 12px;
+  margin-bottom: 8px;
 }
 
 .panel-head b {
@@ -244,17 +243,47 @@ dt,
 .git-panel,
 .file-panel {
   display: grid;
-  gap: 9px;
+  gap: 7px;
+}
+
+.rail .project-stack {
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+}
+
+.rail .project-stack .section-title {
+  grid-column: 1 / -1;
 }
 
 .project {
   width: 100%;
+  min-width: 0;
   color: var(--text);
   text-align: left;
   display: grid;
   gap: 3px;
-  padding: 8px 10px;
+  padding: 7px 10px;
   background: var(--panel-solid);
+}
+
+.rail .project {
+  min-height: 58px;
+}
+
+.project strong {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.rail input,
+.rail select {
+  min-height: 34px;
+  padding: 7px 10px;
+}
+
+.rail button {
+  padding: 7px 10px;
 }
 
 .project.active {
@@ -676,7 +705,6 @@ dd {
 .rail .file-panel {
   min-height: 0;
   height: 100%;
-  min-height: 360px;
   grid-template-rows: 30px 30px minmax(0, 1fr);
   gap: 6px;
   padding: 10px;

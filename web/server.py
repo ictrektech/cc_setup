@@ -1,15 +1,18 @@
 #!/usr/bin/env python3
 import base64
 import hashlib
+import hmac
 import http.server
 import json
 import os
 import pty
 import shutil
 import signal
+import secrets
 import socketserver
 import struct
 import subprocess
+import sys
 import threading
 import time
 import uuid
@@ -21,6 +24,11 @@ ROOT = Path(__file__).resolve().parent
 PUBLIC = ROOT / "public"
 PORT = int(os.environ.get("PORT", "3766"))
 SESSIONS_PATH = Path(os.environ.get("AGENTROOM_SESSIONS_PATH", ROOT / ".agentroom_sessions.json"))
+AUTH_DIR = Path(os.environ.get("AGENTROOM_AUTH_DIR", Path.home() / ".agentroom"))
+TOKEN_PATH = Path(os.environ.get("AGENTROOM_TOKEN_PATH", AUTH_DIR / "token"))
+SESSION_SECRET_PATH = Path(os.environ.get("AGENTROOM_SESSION_SECRET_PATH", AUTH_DIR / "session_secret"))
+AUTH_COOKIE = "agentroom_session"
+AUTH_MAX_AGE = int(os.environ.get("AGENTROOM_AUTH_MAX_AGE", str(7 * 24 * 60 * 60)))
 WS_GUID = "258EAFA5-E914-47DA-95CA-C5AB0DC85B11"
 sessions = {}
 sessions_lock = threading.RLock()
@@ -40,6 +48,73 @@ def run_cmd(args, cwd, timeout=20, check=False):
     if check and proc.returncode != 0:
         raise RuntimeError(proc.stdout.strip() or f"{args[0]} exited with {proc.returncode}")
     return proc.returncode, proc.stdout
+
+
+def ensure_private_file(path, value_factory):
+    path.parent.mkdir(parents=True, exist_ok=True)
+    try:
+        path.parent.chmod(0o700)
+    except OSError:
+        pass
+    if not path.exists():
+        path.write_text(value_factory() + "\n", encoding="utf-8")
+        try:
+            path.chmod(0o600)
+        except OSError:
+            pass
+    return path.read_text(encoding="utf-8").strip()
+
+
+def get_auth_token():
+    env_token = os.environ.get("AGENTROOM_TOKEN")
+    if env_token:
+        return env_token.strip()
+    return ensure_private_file(TOKEN_PATH, lambda: secrets.token_urlsafe(32))
+
+
+def get_session_secret():
+    env_secret = os.environ.get("AGENTROOM_SESSION_SECRET")
+    if env_secret:
+        return env_secret.strip()
+    return ensure_private_file(SESSION_SECRET_PATH, lambda: secrets.token_urlsafe(48))
+
+
+def print_token():
+    token = get_auth_token()
+    print(token)
+
+
+def sign_session(expires, nonce):
+    payload = f"{expires}:{nonce}"
+    signature = hmac.new(get_session_secret().encode(), payload.encode(), hashlib.sha256).hexdigest()
+    return f"{payload}:{signature}"
+
+
+def verify_session_cookie(value):
+    if not value:
+        return False
+    parts = value.split(":")
+    if len(parts) != 3:
+        return False
+    expires_text, nonce, signature = parts
+    try:
+        expires = int(expires_text)
+    except ValueError:
+        return False
+    if expires < int(time.time()):
+        return False
+    expected = hmac.new(get_session_secret().encode(), f"{expires}:{nonce}".encode(), hashlib.sha256).hexdigest()
+    return hmac.compare_digest(signature, expected)
+
+
+def parse_cookies(header):
+    cookies = {}
+    for item in str(header or "").split(";"):
+        if "=" not in item:
+            continue
+        key, value = item.split("=", 1)
+        cookies[key.strip()] = value.strip()
+    return cookies
 
 
 def git_cmd(cwd, *args, timeout=20, check=False):
@@ -993,6 +1068,70 @@ def json_response(handler, status, payload):
     handler.wfile.write(body)
 
 
+def html_response(handler, status, html):
+    body = html.encode("utf-8")
+    handler.send_response(status)
+    handler.send_header("Content-Type", "text/html; charset=utf-8")
+    handler.send_header("Content-Length", str(len(body)))
+    handler.end_headers()
+    handler.wfile.write(body)
+
+
+def login_page():
+    return """<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Agent Room 登录</title>
+  <style>
+    :root { color-scheme: light; font-family: -apple-system, BlinkMacSystemFont, "SF Pro Text", "Segoe UI", sans-serif; }
+    body { min-height: 100vh; margin: 0; display: grid; place-items: center; background: #f5f5f7; color: #1d1d1f; }
+    main { width: min(420px, calc(100vw - 32px)); padding: 28px; border: 1px solid rgba(60,60,67,.14); border-radius: 18px; background: rgba(255,255,255,.78); box-shadow: 0 18px 42px rgba(0,0,0,.08); backdrop-filter: blur(20px); }
+    h1 { margin: 0 0 8px; font-size: 28px; line-height: 1.1; }
+    p { margin: 0 0 22px; color: #6e6e73; }
+    form { display: grid; gap: 12px; }
+    label { display: grid; gap: 7px; color: #6e6e73; font-size: 13px; font-weight: 650; }
+    input, button { font: inherit; border-radius: 10px; }
+    input { width: 100%; box-sizing: border-box; border: 1px solid rgba(60,60,67,.18); padding: 12px; outline: none; }
+    input:focus { border-color: #007aff; box-shadow: 0 0 0 3px rgba(0,122,255,.14); }
+    button { border: 1px solid rgba(60,60,67,.14); padding: 11px 14px; background: #34c759; color: #06100a; font-weight: 750; cursor: pointer; }
+    .error { min-height: 20px; color: #ff3b30; font-size: 13px; }
+    code { padding: 2px 5px; border-radius: 6px; background: rgba(0,0,0,.06); }
+  </style>
+</head>
+<body>
+  <main>
+    <h1>Agent Room</h1>
+    <p>输入当前服务用户的访问 token。可在服务器任意目录运行 <code>cat ~/.agentroom/token</code> 查询。</p>
+    <form id="loginForm">
+      <label>Token <input id="token" type="password" autocomplete="current-password" autofocus></label>
+      <button type="submit">进入</button>
+      <div id="error" class="error"></div>
+    </form>
+  </main>
+  <script>
+    document.querySelector("#loginForm").addEventListener("submit", async (event) => {
+      event.preventDefault();
+      const error = document.querySelector("#error");
+      error.textContent = "";
+      const response = await fetch("/api/login", {
+        method: "POST",
+        headers: {"Content-Type": "application/json"},
+        body: JSON.stringify({token: document.querySelector("#token").value})
+      });
+      if (response.ok) {
+        location.href = "/";
+        return;
+      }
+      const data = await response.json().catch(() => ({}));
+      error.textContent = data.error || "登录失败";
+    });
+  </script>
+</body>
+</html>"""
+
+
 def read_json(handler):
     length = int(handler.headers.get("Content-Length", "0") or "0")
     if length == 0:
@@ -1028,8 +1167,49 @@ class Handler(http.server.SimpleHTTPRequestHandler):
     def log_message(self, fmt, *args):
         print("[%s] %s" % (self.log_date_time_string(), fmt % args))
 
+    def is_authenticated(self):
+        cookies = parse_cookies(self.headers.get("Cookie"))
+        return verify_session_cookie(cookies.get(AUTH_COOKIE))
+
+    def require_auth(self, parsed):
+        if parsed.path in {"/login", "/api/login", "/api/auth"}:
+            return True
+        if self.is_authenticated():
+            return True
+        if parsed.path.startswith("/api/") or parsed.path == "/ws":
+            json_response(self, 401, {"ok": False, "error": "需要登录"})
+            return False
+        self.send_response(302)
+        self.send_header("Location", "/login")
+        self.send_header("Content-Length", "0")
+        self.end_headers()
+        return False
+
+    def set_auth_cookie(self):
+        expires = int(time.time()) + AUTH_MAX_AGE
+        value = sign_session(expires, secrets.token_urlsafe(16))
+        self.send_header(
+            "Set-Cookie",
+            f"{AUTH_COOKIE}={value}; Max-Age={AUTH_MAX_AGE}; Path=/; HttpOnly; SameSite=Lax",
+        )
+
+    def clear_auth_cookie(self):
+        self.send_header("Set-Cookie", f"{AUTH_COOKIE}=; Max-Age=0; Path=/; HttpOnly; SameSite=Lax")
+
     def do_GET(self):
         parsed = urlparse(self.path)
+        if not self.require_auth(parsed):
+            return
+        if parsed.path == "/login":
+            if self.is_authenticated():
+                self.send_response(302)
+                self.send_header("Location", "/")
+                self.send_header("Content-Length", "0")
+                self.end_headers()
+                return
+            return html_response(self, 200, login_page())
+        if parsed.path == "/api/auth":
+            return json_response(self, 200, {"ok": True, "authenticated": self.is_authenticated()})
         if parsed.path == "/api/health":
             agents = available_agents()
             return json_response(self, 200, {"ok": True, "command": agents.get("claude"), "agents": agents, "cwd": os.getcwd()})
@@ -1047,6 +1227,30 @@ class Handler(http.server.SimpleHTTPRequestHandler):
 
     def do_POST(self):
         parsed = urlparse(self.path)
+        if parsed.path == "/api/login":
+            body = read_json(self)
+            token = str(body.get("token") or "")
+            if not hmac.compare_digest(token, get_auth_token()):
+                return json_response(self, 401, {"ok": False, "error": "token 不正确"})
+            payload = json.dumps({"ok": True}, ensure_ascii=False).encode("utf-8")
+            self.send_response(200)
+            self.send_header("Content-Type", "application/json; charset=utf-8")
+            self.set_auth_cookie()
+            self.send_header("Content-Length", str(len(payload)))
+            self.end_headers()
+            self.wfile.write(payload)
+            return
+        if not self.require_auth(parsed):
+            return
+        if parsed.path == "/api/logout":
+            payload = json.dumps({"ok": True}, ensure_ascii=False).encode("utf-8")
+            self.send_response(200)
+            self.send_header("Content-Type", "application/json; charset=utf-8")
+            self.clear_auth_cookie()
+            self.send_header("Content-Length", str(len(payload)))
+            self.end_headers()
+            self.wfile.write(payload)
+            return
         if parsed.path == "/api/sessions":
             return self.create_session()
         if parsed.path.startswith("/api/git/"):
@@ -1149,8 +1353,12 @@ class Handler(http.server.SimpleHTTPRequestHandler):
 
     def do_DELETE(self):
         parsed = urlparse(self.path)
+        if not self.require_auth(parsed):
+            return
         if parsed.path.startswith("/api/sessions/"):
             session_id = parsed.path.split("/")[3]
+        else:
+            return json_response(self, 404, {"error": "not found"})
         with sessions_lock:
             session = sessions.pop(session_id, None)
         if not session:
@@ -1260,9 +1468,19 @@ class ThreadingServer(socketserver.ThreadingMixIn, http.server.HTTPServer):
 
 
 if __name__ == "__main__":
+    if len(sys.argv) > 1:
+        if sys.argv[1] == "token":
+            print_token()
+            raise SystemExit(0)
+        print("Usage: bash dev.sh [token]", file=sys.stderr)
+        raise SystemExit(2)
     os.chdir(ROOT)
+    get_auth_token()
+    get_session_secret()
     command = resolve_command()
     load_sessions(command)
     print(f"agent-room listening on http://0.0.0.0:{PORT}")
     print(f"Claude command: {command or 'not found'}")
+    print(f"Auth token: cat ~/.agentroom/token")
+    print(f"Auth token CLI: python3 {ROOT / 'server.py'} token")
     ThreadingServer(("0.0.0.0", PORT), Handler).serve_forever()
