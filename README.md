@@ -1,8 +1,8 @@
 # cc_setup
 
-Claude / RTK / skills / digital-workers 的一键安装脚本集合。
+Claude / Codex / RTK / skills / digital-workers 的一键安装脚本集合。
 
-## Claude 环境安装
+## Agent 环境安装
 
 这里提供两种互斥方案。推荐新机器优先使用 cc-switch 方案；如果已经在使用 cc-haha，可以继续使用 cc-haha 方案，或者运行 cc-switch 方案自动卸载 cc-haha 后切换。
 
@@ -10,7 +10,7 @@ Claude / RTK / skills / digital-workers 的一键安装脚本集合。
 
 这个方案安装 [saladday/cc-switch-cli](https://github.com/saladday/cc-switch-cli)，可选择安装官方 `@anthropic-ai/claude-code`、`@openai/codex` + `chat-codex`，或两者都安装，并自动配置 ICTrek provider。若检测到 cc-switch 版本低于 `5.8.4`，脚本会自动升级；若检测到 Node.js 低于 `20`，脚本会安装或切换到可用的新版本，并把路径写入 shell 配置。
 
-默认同时安装 Claude Code 和 Codex：
+默认同时安装 Claude Code、Codex 和 chat-codex：
 
 ```bash
 bash <(curl -LfsS https://raw.githubusercontent.com/huluxiaohuowa/cc_setup/main/cc_switch_setup.sh || curl -LfsS https://ghfast.top/https://raw.githubusercontent.com/huluxiaohuowa/cc_setup/main/cc_switch_setup.sh)
@@ -22,7 +22,7 @@ bash <(curl -LfsS https://raw.githubusercontent.com/huluxiaohuowa/cc_setup/main/
 bash <(curl -LfsS https://raw.githubusercontent.com/huluxiaohuowa/cc_setup/main/cc_switch_setup.sh || curl -LfsS https://ghfast.top/https://raw.githubusercontent.com/huluxiaohuowa/cc_setup/main/cc_switch_setup.sh) --agent claude
 ```
 
-只安装 Codex：
+只安装 Codex 和 chat-codex：
 
 ```bash
 bash <(curl -LfsS https://raw.githubusercontent.com/huluxiaohuowa/cc_setup/main/cc_switch_setup.sh || curl -LfsS https://ghfast.top/https://raw.githubusercontent.com/huluxiaohuowa/cc_setup/main/cc_switch_setup.sh) --agent codex
@@ -85,12 +85,12 @@ CC_SWITCH_API_KEY="你的 API Key" ~/.local/bin/codex-update
 
 ```bash
 CC_SWITCH_API_KEY="你的 API Key" claude-update --agent claude
-CC_SWITCH_API_KEY="你的 API Key" claude-update --agent codex
+CC_SWITCH_API_KEY="你的 API Key" codex-update --agent codex
 CC_SWITCH_API_KEY="你的 API Key" claude-update --agent both
 CC_SWITCH_API_KEY="你的 API Key" codex-update --agent both
 ```
 
-`claude-update` 默认只更新 Claude Code；`codex-update` 默认只更新 Codex。需要同时更新两边时使用 `--agent both`。
+`claude-update` 默认只更新 Claude Code；`codex-update` 默认只更新 Codex 和 chat-codex。需要同时更新两边时使用 `--agent both`。
 
 如果系统里已经有官方 Claude Code，脚本会跳过 Claude Code 的重复 npm 安装，但选择 `--agent claude` 或 `--agent both` 时仍会写入并同步 cc-switch Claude provider。Claude 安装流程会打开 Claude 代理接管和 VS Code Claude 插件接管，并关闭 Claude Code 首次打开登录/引导验证。Codex 安装流程会安装 `@openai/codex` 和 `chat-codex`，通过 cc-switch 写入 NewAPI 兼容的 `model_provider = "ictrek"` 配置，启用 cc-switch Codex 代理接管，生成 Codex model catalog，并使用本地路由把 Codex 的 Responses 请求转为上游 Chat Completions。
 
@@ -122,10 +122,11 @@ claude-uninstall
 codex-uninstall
 ```
 
-`claude-uninstall` 默认只卸载 Claude Code 相关内容；`codex-uninstall` 默认只卸载 Codex 相关内容。需要同时卸载两边时执行：
+`claude-uninstall` 默认只卸载 Claude Code 相关内容；`codex-uninstall` 默认只卸载 Codex 和 chat-codex 相关内容。需要同时卸载两边时执行：
 
 ```bash
 claude-uninstall --agent both
+codex-uninstall --agent both
 ```
 
 卸载会移除对应 agent 的 `ictrek` provider；Claude 卸载会关闭 Claude 代理接管和 VS Code Claude 插件接管，并卸载官方 Claude Code npm 包；Codex 卸载会清理本方案写入的 Codex 配置，并卸载 Codex 和 chat-codex npm 包。它不会删除 cc-switch 本体和 `~/.cc-switch` 里的其它 provider。
@@ -212,7 +213,7 @@ bash <(curl -LfsS https://raw.githubusercontent.com/huluxiaohuowa/cc_setup/main/
 如果 Claude 命令不在 PATH 中，可以指定：
 
 ```bash
-CLAUDE_BIN=claude-haha bash <(curl -LfsS https://raw.githubusercontent.com/huluxiaohuowa/cc_setup/main/dworkers_setup.sh || curl -LfsS https://ghfast.top/https://raw.githubusercontent.com/huluxiaohuowa/cc_setup/main/dworkers_setup.sh)
+CLAUDE_BIN=/home/jhu/.local/npm/bin/claude bash <(curl -LfsS https://raw.githubusercontent.com/huluxiaohuowa/cc_setup/main/dworkers_setup.sh || curl -LfsS https://ghfast.top/https://raw.githubusercontent.com/huluxiaohuowa/cc_setup/main/dworkers_setup.sh)
 ```
 
 安装完成后，脚本会输出项目目录，并生成示例任务。进入项目目录运行：
@@ -225,7 +226,7 @@ CLAUDE_BIN=claude-haha bash <(curl -LfsS https://raw.githubusercontent.com/hulux
 
 ```bash
 cd <digital-workers 仓库目录>
-CLAUDE_BIN=claude-haha python3 -m digital_worker.runner full \
+CLAUDE_BIN=claude python3 -m digital_worker.runner full \
   "<项目目录>/runs/example-health-api" \
   "<项目目录>"
 ```
@@ -336,7 +337,7 @@ setsid env \
 - 支持 Claude 和 Codex 两种 agent；新建房间时可选择 agent 类型，房间会保存对应的 provider session/thread id。
 - 使用 `claude -p --verbose --output-format stream-json --include-partial-messages` 运行任务，主对话窗口按 Claude 的真实 `content_block_delta` 流式输出。
 - 使用 `codex exec --json` / `codex exec resume --json` 运行 Codex 任务，并在 Raw 视图保留 Codex JSONL 事件。
-- 主窗口显示结构化的 `System / You / Claude` 对话气泡，避免 Claude TUI spinner、控制字符和 JSON 流污染回答。
+- 主窗口显示结构化的 `System / You / Agent` 对话气泡，避免 CLI spinner、控制字符和 JSON 流污染回答。
 - 提供 Raw 视图查看原始输出，方便排查 Claude CLI 或 JSON stream 问题。
 - 中间工作区支持 `对话 / Raw / 文件` 标签页切换，聊天输入框固定在对话窗口底部，聊天历史保持固定高度并支持鼠标滚动查看上下文。
 - 左侧项目区提供文件夹树，点击文件夹可展开并选为当前目标目录；新建文件会落在当前目录，文件也可拖拽移动到其它文件夹。
@@ -349,7 +350,7 @@ setsid env \
 
 ## 脚本说明
 
-- `cc_switch_setup.sh`: macOS / Linux 安装官方 Claude Code、Codex 和 cc-switch-cli，按 `--agent claude|codex|both` 配置 ICTrek provider，并写入 `claude-update`、`codex-update`、`claude-uninstall`、`codex-uninstall`。
+- `cc_switch_setup.sh`: macOS / Linux 安装官方 Claude Code、Codex、chat-codex 和 cc-switch-cli，按 `--agent claude|codex|both` 配置 ICTrek provider，并写入 `claude-update`、`codex-update`、`claude-uninstall`、`codex-uninstall`。
 - `cc_setup_unix.sh`: macOS / Linux 安装 Claude 环境、RTK，并写入 `claude`、`claude-env`、`claude-update`、`claude-uninstall`。
 - `cc_setup_win.ps1`: Windows PowerShell 安装 Claude 环境、RTK，并写入对应命令。
 - `dworkers_setup.sh`: 克隆/更新 `ictrektech/digital-workers`，重装 skills，生成 `.env` 和示例任务。
