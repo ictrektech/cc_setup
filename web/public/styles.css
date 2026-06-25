@@ -213,6 +213,7 @@ dt,
 .panel-head,
 .panel-row,
 .git-actions,
+.file-actions,
 .editor-head,
 .room-top,
 .room-bottom,
@@ -922,6 +923,13 @@ dd {
   background: rgba(0, 122, 255, 0.08);
 }
 
+.tree-folder summary.selected,
+.tree-folder summary.drop-target,
+.file-tree.drop-target {
+  background: rgba(0, 122, 255, 0.12);
+  outline: 1px solid rgba(0, 122, 255, 0.22);
+}
+
 .tree-folder[open] > summary .folder-icon {
   transform: rotate(90deg);
 }
@@ -954,6 +962,15 @@ dd {
   background: rgba(0, 122, 255, 0.1);
 }
 
+.file-item[draggable="true"] {
+  cursor: grab;
+}
+
+.file-item.dragging {
+  opacity: 0.55;
+  cursor: grabbing;
+}
+
 .git-file.empty,
 .file-item.empty {
   display: block;
@@ -984,6 +1001,10 @@ dd {
 .git-actions {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
+.file-actions {
+  gap: 6px;
 }
 
 .git-actions button,

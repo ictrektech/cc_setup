@@ -311,6 +311,48 @@ def write_file(cwd, relative, content):
     return {"ok": True, "path": target.relative_to(root).as_posix(), "language": language_for(target)}
 
 
+def create_file(cwd, directory, name):
+    root = Path(normalize_cwd(cwd)).resolve()
+    parent = safe_child(root, directory or "")
+    if not parent.exists() or not parent.is_dir():
+        raise RuntimeError("目标文件夹不存在。")
+    clean_name = str(name or "").strip()
+    if not clean_name:
+        raise RuntimeError("文件名不能为空。")
+    if clean_name in {".", ".."} or "/" in clean_name or "\\" in clean_name:
+        raise RuntimeError("文件名不能包含路径分隔符。")
+    target = safe_child(parent, clean_name)
+    if target.exists():
+        raise RuntimeError("文件已存在。")
+    target.write_text("", encoding="utf-8")
+    return {
+        "ok": True,
+        "path": target.relative_to(root).as_posix(),
+        "language": language_for(target),
+    }
+
+
+def move_file(cwd, relative, target_directory):
+    root = Path(normalize_cwd(cwd)).resolve()
+    source = safe_child(root, relative)
+    if not source.exists() or not source.is_file():
+        raise RuntimeError("源文件不存在。")
+    target_parent = safe_child(root, target_directory or "")
+    if not target_parent.exists() or not target_parent.is_dir():
+        raise RuntimeError("目标文件夹不存在。")
+    target = safe_child(target_parent, source.name)
+    if source == target:
+        return {"ok": True, "path": source.relative_to(root).as_posix(), "language": language_for(source)}
+    if target.exists():
+        raise RuntimeError("目标文件夹中已存在同名文件。")
+    shutil.move(str(source), str(target))
+    return {
+        "ok": True,
+        "path": target.relative_to(root).as_posix(),
+        "language": language_for(target),
+    }
+
+
 def language_for(path):
     suffix = path.suffix.lower()
     return {
@@ -1346,7 +1388,12 @@ class Handler(http.server.SimpleHTTPRequestHandler):
     def files_post(self, parsed):
         body = read_json(self)
         cwd = normalize_cwd(body.get("cwd"))
+        action = str(body.get("action") or "save")
         try:
+            if action == "create":
+                return json_response(self, 200, create_file(cwd, body.get("directory"), body.get("name")))
+            if action == "move":
+                return json_response(self, 200, move_file(cwd, body.get("path"), body.get("targetDirectory")))
             return json_response(self, 200, write_file(cwd, body.get("path"), body.get("content", "")))
         except Exception as exc:
             return json_response(self, 400, {"ok": False, "error": str(exc)})

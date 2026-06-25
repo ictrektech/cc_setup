@@ -6,6 +6,7 @@ const state = {
   view: "chat",
   selectedGitPath: "",
   selectedFilePath: "",
+  selectedFileDir: "",
   currentFileLanguage: "text",
   selectedCommit: "",
   openFiles: []
@@ -57,6 +58,7 @@ const els = {
   gitPullBtn: document.querySelector("#gitPullBtn"),
   gitPushBtn: document.querySelector("#gitPushBtn"),
   gitOutput: document.querySelector("#gitOutput"),
+  fileNewBtn: document.querySelector("#fileNewBtn"),
   fileRefreshBtn: document.querySelector("#fileRefreshBtn"),
   fileStatus: document.querySelector("#fileStatus"),
   fileTree: document.querySelector("#fileTree"),
@@ -379,6 +381,7 @@ els.gitFetchBtn.addEventListener("click", () => runGitAction("fetch"));
 els.gitPullBtn.addEventListener("click", () => runGitAction("pull"));
 els.gitPushBtn.addEventListener("click", () => runGitAction("push"));
 els.gitCommitBtn.addEventListener("click", () => runGitAction("commit", { message: els.gitMessage.value.trim() }));
+els.fileNewBtn.addEventListener("click", createNewFile);
 els.fileRefreshBtn.addEventListener("click", refreshFiles);
 els.fileSaveBtn.addEventListener("click", saveCurrentFile);
 els.fileEditor.addEventListener("input", () => {
@@ -396,6 +399,7 @@ function activeCwd() {
 function resetProjectSelection() {
   state.selectedGitPath = "";
   state.selectedFilePath = "";
+  state.selectedFileDir = "";
   state.selectedCommit = "";
   state.currentFileLanguage = "text";
   state.openFiles = [];
@@ -421,6 +425,7 @@ function setGitEnabled(enabled) {
 }
 
 function setFileEnabled(enabled) {
+  els.fileNewBtn.disabled = !enabled;
   els.fileRefreshBtn.disabled = !enabled;
   els.fileEditor.disabled = !enabled || !state.selectedFilePath;
   els.fileSaveBtn.disabled = !enabled || !state.selectedFilePath;
@@ -643,7 +648,15 @@ async function refreshFiles() {
 
 function renderFileTree(data) {
   els.fileTree.innerHTML = "";
-  els.fileStatus.textContent = `${basename(data.root)} · ${data.files.length} files${data.truncated ? " · truncated" : ""}`;
+  if (!state.selectedFileDir) state.selectedFileDir = "";
+  els.fileStatus.textContent = fileStatusText(data);
+  els.fileTree.dataset.dir = "";
+  els.fileTree.ondragover = handleFileDragOver;
+  els.fileTree.ondragleave = handleFileDragLeave;
+  els.fileTree.ondrop = handleFileDrop;
+  els.fileTree.onclick = (event) => {
+    if (event.target === els.fileTree) selectFileDir("");
+  };
   if (!data.files.length) {
     const empty = document.createElement("div");
     empty.className = "file-item empty";
@@ -660,8 +673,16 @@ function buildFileTree(files) {
   for (const file of files) {
     const parts = file.path.split("/");
     let node = root;
-    for (const part of parts.slice(0, -1)) {
-      if (!node.dirs.has(part)) node.dirs.set(part, { name: part, dirs: new Map(), files: [] });
+    for (let index = 0; index < parts.length - 1; index += 1) {
+      const part = parts[index];
+      if (!node.dirs.has(part)) {
+        node.dirs.set(part, {
+          name: part,
+          path: parts.slice(0, index + 1).join("/"),
+          dirs: new Map(),
+          files: []
+        });
+      }
       node = node.dirs.get(part);
     }
     node.files.push(file);
@@ -675,7 +696,13 @@ function renderTreeNode(node, container, depth) {
     details.className = "tree-folder";
     details.open = depth < 1;
     const summary = document.createElement("summary");
+    summary.dataset.dir = dir.path;
+    summary.classList.toggle("selected", state.selectedFileDir === dir.path);
     summary.innerHTML = `<span class="folder-icon">▸</span><strong>${escapeHtml(dir.name)}</strong>`;
+    summary.addEventListener("click", () => selectFileDir(dir.path));
+    summary.addEventListener("dragover", handleFileDragOver);
+    summary.addEventListener("dragleave", handleFileDragLeave);
+    summary.addEventListener("drop", handleFileDrop);
     details.appendChild(summary);
     const branch = document.createElement("div");
     branch.className = "tree-branch";
@@ -690,9 +717,58 @@ function renderTreeNode(node, container, depth) {
     item.innerHTML = `<strong>${escapeHtml(file.name)}</strong><span>${escapeHtml(file.language)}</span>`;
     item.title = file.path;
     item.disabled = !file.editable;
+    item.draggable = file.editable;
+    item.dataset.path = file.path;
+    item.addEventListener("dragstart", (event) => {
+      event.dataTransfer.effectAllowed = "move";
+      event.dataTransfer.setData("text/plain", file.path);
+      item.classList.add("dragging");
+    });
+    item.addEventListener("dragend", () => item.classList.remove("dragging"));
     item.addEventListener("click", () => openFile(file.path, item));
     container.appendChild(item);
   }
+}
+
+function fileStatusText(data) {
+  const folder = state.selectedFileDir ? ` · 当前文件夹 ${state.selectedFileDir}` : " · 当前文件夹 /";
+  return `${basename(data.root)} · ${data.files.length} files${data.truncated ? " · truncated" : ""}${folder}`;
+}
+
+function selectFileDir(path) {
+  state.selectedFileDir = path || "";
+  for (const node of els.fileTree.querySelectorAll("summary")) {
+    node.classList.toggle("selected", node.dataset.dir === state.selectedFileDir);
+  }
+  els.fileTree.classList.toggle("selected-root", state.selectedFileDir === "");
+  const root = els.fileStatus.textContent.split(" · ")[0] || "Files";
+  els.fileStatus.textContent = `${root} · 当前文件夹 ${state.selectedFileDir || "/"}`;
+}
+
+function handleFileDragOver(event) {
+  const target = event.currentTarget;
+  if (!target.dataset || target.dataset.dir === undefined) return;
+  event.preventDefault();
+  event.stopPropagation();
+  event.dataTransfer.dropEffect = "move";
+  target.classList.add("drop-target");
+}
+
+function handleFileDragLeave(event) {
+  event.stopPropagation();
+  event.currentTarget.classList.remove("drop-target");
+}
+
+async function handleFileDrop(event) {
+  const target = event.currentTarget;
+  if (!target.dataset || target.dataset.dir === undefined) return;
+  event.preventDefault();
+  event.stopPropagation();
+  target.classList.remove("drop-target");
+  const sourcePath = event.dataTransfer.getData("text/plain");
+  const targetDirectory = target.dataset.dir || "";
+  if (!sourcePath) return;
+  await moveFileToDirectory(sourcePath, targetDirectory);
 }
 
 function renderFileError(message) {
@@ -776,6 +852,53 @@ async function saveCurrentFile() {
       body: JSON.stringify({ cwd: activeCwd(), path: state.selectedFilePath, content: els.fileEditor.value })
     });
     els.fileStatus.textContent = `已保存 ${state.selectedFilePath}`;
+    refreshGit();
+  } catch (error) {
+    els.fileStatus.textContent = error.message;
+  }
+}
+
+async function createNewFile() {
+  const cwd = activeCwd();
+  if (!cwd) return;
+  const directory = state.selectedFileDir || "";
+  const name = prompt(`在 ${directory || "/"} 下新建文件：`, "new-file.txt");
+  if (!name) return;
+  els.fileStatus.textContent = "新建文件中...";
+  try {
+    const data = await request("/api/files", {
+      method: "POST",
+      body: JSON.stringify({ action: "create", cwd, directory, name })
+    });
+    state.selectedFilePath = data.path;
+    await refreshFiles();
+    await reopenFile(data.path);
+    refreshGit();
+  } catch (error) {
+    els.fileStatus.textContent = error.message;
+  }
+}
+
+async function moveFileToDirectory(path, targetDirectory) {
+  const cwd = activeCwd();
+  if (!cwd) return;
+  const currentDirectory = path.includes("/") ? path.slice(0, path.lastIndexOf("/")) : "";
+  if (currentDirectory === targetDirectory) return;
+  els.fileStatus.textContent = `移动 ${path}...`;
+  try {
+    const data = await request("/api/files", {
+      method: "POST",
+      body: JSON.stringify({ action: "move", cwd, path, targetDirectory })
+    });
+    state.selectedFileDir = targetDirectory || "";
+    state.openFiles = state.openFiles.map((file) => (
+      file.path === path ? { ...file, path: data.path, language: data.language || file.language } : file
+    ));
+    if (state.selectedFilePath === path) {
+      state.selectedFilePath = data.path;
+      els.fileName.textContent = data.path;
+    }
+    await refreshFiles();
     refreshGit();
   } catch (error) {
     els.fileStatus.textContent = error.message;
