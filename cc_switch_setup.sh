@@ -8,6 +8,7 @@ SELF_SCRIPT_URL_FAST="https://ghfast.top/${SELF_SCRIPT_URL}"
 GHFAST_PREFIX="${GHFAST_PREFIX:-https://ghfast.top/}"
 GHFAST_PREFIX="${GHFAST_PREFIX%/}/"
 MIN_CC_SWITCH_VERSION="${MIN_CC_SWITCH_VERSION:-5.8.4}"
+MIN_NODE_MAJOR_VERSION="${MIN_NODE_MAJOR_VERSION:-20}"
 RTK_INSTALL_URLS=(
   "https://raw.githubusercontent.com/rtk-ai/rtk/master/install.sh"
   "https://raw.githubusercontent.com/rtk-ai/rtk/main/install.sh"
@@ -45,7 +46,7 @@ AGENT_TARGET="${CC_SWITCH_AGENT:-both}"
 
 CODEX_PROVIDER_ID="${CC_SWITCH_CODEX_PROVIDER_ID:-$PROVIDER_ID}"
 CODEX_PROVIDER_NAME="${CC_SWITCH_CODEX_PROVIDER_NAME:-$PROVIDER_NAME Codex}"
-CODEX_PROVIDER_KEY="${CC_SWITCH_CODEX_PROVIDER_KEY:-custom}"
+CODEX_PROVIDER_KEY="${CC_SWITCH_CODEX_PROVIDER_KEY:-$CODEX_PROVIDER_ID}"
 CODEX_API_BASE_URL="${CC_SWITCH_CODEX_API_BASE_URL:-${API_BASE_URL%/}/v1}"
 CODEX_API_KEY="$(normalize_api_key "${CC_SWITCH_CODEX_API_KEY:-$API_KEY}")"
 CODEX_MODEL="${CC_SWITCH_CODEX_MODEL:-$DEFAULT_MODEL}"
@@ -250,10 +251,12 @@ PY
 }
 
 ensure_local_bin_in_path() {
-  local sh_content='export PATH="$HOME/.local/node/bin:$HOME/.local/npm/bin:$HOME/.local/bin:$PATH"'
-  local fish_content='fish_add_path "$HOME/.local/node/bin" "$HOME/.local/npm/bin" "$HOME/.local/bin"'
+  local sh_content='export PATH="$HOME/.local/node/bin:$HOME/.local/npm/bin:$HOME/.local/bin:/data/$USER/dev/bin:/data/jhu/dev/bin:$PATH"'
+  local fish_content='fish_add_path "$HOME/.local/node/bin" "$HOME/.local/npm/bin" "$HOME/.local/bin" "/data/$USER/dev/bin" "/data/jhu/dev/bin"'
 
   upsert_shell_block "$HOME/.bashrc" "$sh_content"
+  upsert_shell_block "$HOME/.bash_profile" "$sh_content"
+  upsert_shell_block "$HOME/.profile" "$sh_content"
   upsert_shell_block "$HOME/.zshrc" "$sh_content"
   upsert_shell_block "$HOME/.zprofile" "$sh_content"
   upsert_shell_block "$HOME/.config/fish/config.fish" "$fish_content"
@@ -279,7 +282,7 @@ node_major_version() {
 }
 
 node_version_is_supported() {
-  [ "$(node_major_version)" -ge 18 ]
+  [ "$(node_major_version)" -ge "$MIN_NODE_MAJOR_VERSION" ]
 }
 
 install_node_with_nodesource() {
@@ -536,13 +539,13 @@ ensure_node_npm() {
 
   if [ "$OS_TYPE" = "macos" ]; then
     if ! need_cmd node || ! node_version_is_supported || ! need_cmd npm; then
-      warn "未检测到 Node.js >= 18/npm，将通过 Homebrew 安装 node。"
+      warn "未检测到 Node.js >= ${MIN_NODE_MAJOR_VERSION}/npm，将通过 Homebrew 安装 node。"
       install_with_brew node
       setup_user_npm_prefix
     fi
   else
     if ! need_cmd node || ! node_version_is_supported || ! need_cmd npm; then
-      warn "当前 Node.js 不可用或版本过低，需要 Node.js >= 18。"
+      warn "当前 Node.js 不可用或版本过低，需要 Node.js >= ${MIN_NODE_MAJOR_VERSION}。"
       if ! install_node_with_nodesource; then
         warn "NodeSource 安装失败，改为安装用户目录版 Node.js 20。"
         install_node_from_tarball
@@ -552,7 +555,7 @@ ensure_node_npm() {
   fi
 
   if ! need_cmd node || ! node_version_is_supported; then
-    err "Node.js 版本仍不满足要求。当前版本：$(node --version 2>/dev/null || echo not-found)，需要 >= 18。"
+    err "Node.js 版本仍不满足要求。当前版本：$(node --version 2>/dev/null || echo not-found)，需要 >= ${MIN_NODE_MAJOR_VERSION}。"
     exit 1
   fi
 
