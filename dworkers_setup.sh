@@ -93,16 +93,6 @@ detect_claude_command() {
     return 0
   fi
 
-  if command -v claude-haha >/dev/null 2>&1; then
-    echo "claude-haha"
-    return 0
-  fi
-
-  if bash -ic 'type claude-haha >/dev/null 2>&1' >/dev/null 2>&1; then
-    echo "claude-haha"
-    return 0
-  fi
-
   if command -v claude >/dev/null 2>&1; then
     echo "claude"
     return 0
@@ -126,13 +116,13 @@ check_claude() {
     return 0
   fi
 
-  warn "未检测到 claude-haha 或 claude 命令。"
-  warn "如果你的命令是 claude-haha，请确认它在 PATH 中："
-  warn "  command -v claude-haha"
+  warn "未检测到 claude 命令。"
+  warn "请确认 claude 在 PATH 中："
+  warn "  command -v claude"
   warn "也可以这样运行："
-  warn "  CLAUDE_BIN=claude-haha bash setup-digital-workers.sh"
+  warn "  CLAUDE_BIN=/path/to/claude bash setup-digital-workers.sh"
 
-  DETECTED_CLAUDE_BIN="claude-haha"
+  DETECTED_CLAUDE_BIN="claude"
   export DETECTED_CLAUDE_BIN
 }
 
