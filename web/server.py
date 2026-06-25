@@ -378,9 +378,9 @@ def language_for(path):
 
 def resolve_command(agent="claude"):
     if agent == "codex":
-        candidates = [os.environ.get("CODEX_BIN"), "codex"]
+        candidates = command_candidates("CODEX_BIN", "codex")
     else:
-        candidates = [os.environ.get("CLAUDE_BIN"), "claude"]
+        candidates = command_candidates("CLAUDE_BIN", "claude")
     for candidate in [item for item in candidates if item]:
         expanded = os.path.expanduser(candidate)
         if "/" in expanded and os.path.exists(expanded):
@@ -400,6 +400,15 @@ def resolve_command(agent="claude"):
         except Exception:
             pass
     return None
+
+
+def command_candidates(env_name, command):
+    return [
+        os.environ.get(env_name),
+        f"~/.local/npm/bin/{command}",
+        f"~/.local/bin/{command}",
+        command,
+    ]
 
 
 def available_agents():

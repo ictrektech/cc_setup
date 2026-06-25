@@ -277,7 +277,7 @@ python3 /home/jhu/dev/repos/agentroom/server.py token
 常用启动配置：
 
 ```bash
-CLAUDE_BIN=/data/jhu/dev/bin/claude CODEX_BIN=/home/jhu/.local/npm/bin/codex PORT=3766 bash dev.sh
+CLAUDE_BIN=/home/jhu/.local/npm/bin/claude CODEX_BIN=/home/jhu/.local/npm/bin/codex PORT=3766 bash dev.sh
 ```
 
 支持的环境变量：
@@ -295,6 +295,15 @@ CLAUDE_BIN=/data/jhu/dev/bin/claude CODEX_BIN=/home/jhu/.local/npm/bin/codex POR
 | `AGENTROOM_AUTH_MAX_AGE` | `604800` | 登录 cookie 有效期，单位秒 |
 | `AGENTROOM_SESSIONS_PATH` | `web/.agentroom_sessions.json` | Agent Room 会话恢复文件 |
 
+Claude / Codex 命令查找顺序：
+
+1. `CLAUDE_BIN` / `CODEX_BIN` 环境变量。
+2. 当前启动用户的 `~/.local/npm/bin/claude`、`~/.local/npm/bin/codex`。
+3. 当前启动用户的 `~/.local/bin/claude`、`~/.local/bin/codex`。
+4. `PATH` 里的 `claude`、`codex`。
+
+如果以上位置都找不到，需要通过 `CLAUDE_BIN` / `CODEX_BIN` 显式指定。
+
 认证相关文件：
 
 ```text
@@ -309,7 +318,7 @@ CLAUDE_BIN=/data/jhu/dev/bin/claude CODEX_BIN=/home/jhu/.local/npm/bin/codex POR
 ```bash
 cd /home/jhu/dev/repos/agentroom
 setsid env \
-  CLAUDE_BIN=/data/jhu/dev/bin/claude \
+  CLAUDE_BIN=/home/jhu/.local/npm/bin/claude \
   CODEX_BIN=/home/jhu/.local/npm/bin/codex \
   PORT=3766 \
   CLAUDE_RUN_TIMEOUT=600 \

@@ -17,6 +17,8 @@ const sessions = new Map();
 const PORT = Number(process.env.PORT || 3766);
 const DEFAULT_COMMANDS = [
   process.env.CLAUDE_BIN,
+  "~/.local/npm/bin/claude",
+  "~/.local/bin/claude",
   "claude"
 ].filter(Boolean);
 
