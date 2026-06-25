@@ -8,7 +8,7 @@ Claude / RTK / skills / digital-workers 的一键安装脚本集合。
 
 ### 方案一：cc-switch + 官方 Claude Code / Codex（macOS / Linux）
 
-这个方案安装 [saladday/cc-switch-cli](https://github.com/saladday/cc-switch-cli)，可选择安装官方 `@anthropic-ai/claude-code`、`@openai/codex`，或两者都安装，并自动配置 ICTrek provider。
+这个方案安装 [saladday/cc-switch-cli](https://github.com/saladday/cc-switch-cli)，可选择安装官方 `@anthropic-ai/claude-code`、`@openai/codex`，或两者都安装，并自动配置 ICTrek provider。若检测到 cc-switch 版本低于 `5.8.4`，脚本会自动升级。
 
 默认同时安装 Claude Code 和 Codex：
 
@@ -41,7 +41,8 @@ Claude API 地址: https://ai.ictrek.com
 Codex API 地址: https://ai.ictrek.com/v1
 API Key: dummy-keys（占位，安装后请改成自己的 key）
 Claude Haiku 模型: volces/DeepSeek-V4-Flash
-Claude Sonnet/Opus/默认模型: volces/GLM-5.1
+Claude Sonnet/Opus/Reasoning/默认模型: volces/GLM-5.1
+Claude Small Fast 模型: volces/DeepSeek-V4-Flash
 Codex 模型: volces/GLM-5.1
 Provider ID: ictrek
 ```
@@ -91,7 +92,7 @@ CC_SWITCH_API_KEY="你的 API Key" codex-update --agent both
 
 `claude-update` 默认只更新 Claude Code；`codex-update` 默认只更新 Codex。需要同时更新两边时使用 `--agent both`。
 
-如果系统里已经有官方 Claude Code，脚本会跳过 Claude Code 的重复 npm 安装，但选择 `--agent claude` 或 `--agent both` 时仍会写入并同步 cc-switch Claude provider。Claude 安装流程会打开 Claude 代理接管和 VS Code Claude 插件接管，并关闭 Claude Code 首次打开登录/引导验证。Codex 安装流程会通过 cc-switch 写入 NewAPI 兼容的 `model_provider` 配置，并同步到 `~/.codex/config.toml`。
+如果系统里已经有官方 Claude Code，脚本会跳过 Claude Code 的重复 npm 安装，但选择 `--agent claude` 或 `--agent both` 时仍会写入并同步 cc-switch Claude provider。Claude 安装流程会打开 Claude 代理接管和 VS Code Claude 插件接管，并关闭 Claude Code 首次打开登录/引导验证。Codex 安装流程会通过 cc-switch 写入 NewAPI 兼容的 `model_provider` 配置，启用 cc-switch Codex 代理接管，生成 Codex model catalog，并使用本地路由把 Codex 的 Responses 请求转为上游 Chat Completions。
 
 查看配置：
 
@@ -101,6 +102,7 @@ cc-switch --app claude proxy show
 claude --help
 claude -p "hello"
 cc-switch --app codex provider current
+cc-switch --app codex proxy show
 codex --version
 codex
 ```

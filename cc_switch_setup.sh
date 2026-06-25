@@ -7,6 +7,7 @@ SELF_SCRIPT_URL="https://raw.githubusercontent.com/huluxiaohuowa/cc_setup/main/c
 SELF_SCRIPT_URL_FAST="https://ghfast.top/${SELF_SCRIPT_URL}"
 GHFAST_PREFIX="${GHFAST_PREFIX:-https://ghfast.top/}"
 GHFAST_PREFIX="${GHFAST_PREFIX%/}/"
+MIN_CC_SWITCH_VERSION="${MIN_CC_SWITCH_VERSION:-5.8.4}"
 RTK_INSTALL_URLS=(
   "https://raw.githubusercontent.com/rtk-ai/rtk/master/install.sh"
   "https://raw.githubusercontent.com/rtk-ai/rtk/main/install.sh"
@@ -37,6 +38,8 @@ API_BASE_URL="https://ai.ictrek.com"
 API_KEY="$(normalize_api_key "${CC_SWITCH_API_KEY:-${API_KEY:-dummy-keys}}")"
 HAIKU_MODEL="volces/DeepSeek-V4-Flash"
 DEFAULT_MODEL="volces/GLM-5.1"
+REASONING_MODEL="${CC_SWITCH_REASONING_MODEL:-$DEFAULT_MODEL}"
+SMALL_FAST_MODEL="${CC_SWITCH_SMALL_FAST_MODEL:-$HAIKU_MODEL}"
 INSTALL_RTK="${CC_SWITCH_INSTALL_RTK:-${INSTALL_RTK:-0}}"
 AGENT_TARGET="${CC_SWITCH_AGENT:-both}"
 
@@ -115,6 +118,19 @@ err() { echo -e "\033[1;31m[ERR]\033[0m $*" >&2; }
 
 need_cmd() {
   command -v "$1" >/dev/null 2>&1
+}
+
+version_ge() {
+  local current="$1"
+  local required="$2"
+  [ "$(printf '%s\n%s\n' "$required" "$current" | sort -V | head -n1)" = "$required" ]
+}
+
+cc_switch_version() {
+  if ! need_cmd cc-switch; then
+    return 1
+  fi
+  cc-switch --version 2>/dev/null | awk '{print $NF}' | sed 's/^v//'
 }
 
 download_nonempty() {
@@ -666,8 +682,13 @@ install_cc_switch_if_needed() {
   export PATH="$HOME/.local/bin:$PATH"
 
   if need_cmd cc-switch; then
-    log "cc-switch 已存在：$(command -v cc-switch)"
-    return 0
+    local current_version
+    current_version="$(cc_switch_version || true)"
+    if [ -n "$current_version" ] && version_ge "$current_version" "$MIN_CC_SWITCH_VERSION"; then
+      log "cc-switch 已存在：$(command -v cc-switch)，版本：$current_version"
+      return 0
+    fi
+    warn "cc-switch 版本过低或无法识别：${current_version:-unknown}，将升级到 >= ${MIN_CC_SWITCH_VERSION}。"
   fi
 
   log "安装 cc-switch-cli。"
@@ -784,6 +805,8 @@ API_BASE_URL="https://ai.ictrek.com"
 API_KEY="dummy-keys"
 HAIKU_MODEL="volces/DeepSeek-V4-Flash"
 DEFAULT_MODEL="volces/GLM-5.1"
+REASONING_MODEL="volces/GLM-5.1"
+SMALL_FAST_MODEL="volces/DeepSeek-V4-Flash"
 CODEX_API_BASE_URL="https://ai.ictrek.com/v1"
 CODEX_API_KEY="dummy-keys"
 CODEX_MODEL="volces/GLM-5.1"
@@ -905,6 +928,8 @@ clean_claude_settings() {
   API_KEY="$API_KEY" \
   HAIKU_MODEL="$HAIKU_MODEL" \
   DEFAULT_MODEL="$DEFAULT_MODEL" \
+  REASONING_MODEL="$REASONING_MODEL" \
+  SMALL_FAST_MODEL="$SMALL_FAST_MODEL" \
   python3 - <<'PY'
 import json
 import os
@@ -928,9 +953,11 @@ if isinstance(env, dict):
         "ANTHROPIC_API_KEY": os.environ["API_KEY"],
         "ANTHROPIC_BASE_URL": os.environ["API_BASE_URL"],
         "ANTHROPIC_MODEL": os.environ["DEFAULT_MODEL"],
+        "ANTHROPIC_REASONING_MODEL": os.environ["REASONING_MODEL"],
         "ANTHROPIC_DEFAULT_HAIKU_MODEL": os.environ["HAIKU_MODEL"],
         "ANTHROPIC_DEFAULT_SONNET_MODEL": os.environ["DEFAULT_MODEL"],
         "ANTHROPIC_DEFAULT_OPUS_MODEL": os.environ["DEFAULT_MODEL"],
+        "ANTHROPIC_SMALL_FAST_MODEL": os.environ["SMALL_FAST_MODEL"],
         "CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC": "1",
     }
     for key, value in expected.items():
@@ -947,15 +974,17 @@ PY
 }
 
 disable_proxy_takeover() {
+  local app_type="${1:-claude}"
   if need_cmd cc-switch; then
-    cc-switch --app claude proxy disable || warn "cc-switch CLI 关闭代理接管失败，使用数据库配置兜底。"
+    cc-switch --app "$app_type" proxy disable || warn "cc-switch CLI 关闭 ${app_type} 代理接管失败，使用数据库配置兜底。"
   fi
 
-  python3 - <<'PY'
+  APP_TYPE="$app_type" python3 - <<'PY'
 import os
 import sqlite3
 from pathlib import Path
 
+app_type = os.environ["APP_TYPE"]
 config_dir = Path(os.environ.get("CC_SWITCH_CONFIG_DIR") or Path.home() / ".cc-switch")
 db_path = config_dir / "cc-switch.db"
 if not db_path.exists():
@@ -963,10 +992,12 @@ if not db_path.exists():
 
 with sqlite3.connect(db_path) as conn:
     conn.execute(
-        "UPDATE proxy_config SET enabled = 0, auto_failover_enabled = 0, updated_at = datetime('now') WHERE app_type = 'claude'"
+        "UPDATE proxy_config SET enabled = 0, auto_failover_enabled = 0, updated_at = datetime('now') WHERE app_type = ?",
+        (app_type,),
     )
     other_enabled = conn.execute(
-        "SELECT COUNT(*) FROM proxy_config WHERE app_type != 'claude' AND enabled = 1"
+        "SELECT COUNT(*) FROM proxy_config WHERE app_type != ? AND enabled = 1",
+        (app_type,),
     ).fetchone()[0]
     if other_enabled == 0:
         conn.execute("UPDATE proxy_config SET proxy_enabled = 0, updated_at = datetime('now')")
@@ -1085,8 +1116,11 @@ main() {
   parse_args "$@"
 
   if wants_claude; then
-    disable_proxy_takeover || warn "关闭 cc-switch 代理接管失败，继续清理其它项目。"
+    disable_proxy_takeover claude || warn "关闭 cc-switch Claude 代理接管失败，继续清理其它项目。"
     disable_claude_plugin_integration || warn "关闭 VS Code Claude 插件接管失败，继续清理其它项目。"
+  fi
+  if wants_codex; then
+    disable_proxy_takeover codex || warn "关闭 cc-switch Codex 代理接管失败，继续清理其它项目。"
   fi
   remove_ictrek_provider || warn "移除 cc-switch provider 失败，继续清理其它项目。"
   if wants_claude; then
@@ -1137,6 +1171,15 @@ init_cc_switch_if_needed() {
   if wants_codex; then
     cc-switch --app codex provider list >/dev/null 2>&1 || true
   fi
+  harden_cc_switch_config_permissions
+}
+
+harden_cc_switch_config_permissions() {
+  local config_dir="${CC_SWITCH_CONFIG_DIR:-$HOME/.cc-switch}"
+  [ -d "$config_dir" ] || return 0
+  chmod 700 "$config_dir" 2>/dev/null || true
+  [ -f "$config_dir/cc-switch.db" ] && chmod 600 "$config_dir/cc-switch.db" 2>/dev/null || true
+  [ -f "$config_dir/settings.json" ] && chmod 600 "$config_dir/settings.json" 2>/dev/null || true
 }
 
 configure_cc_switch_provider() {
@@ -1147,6 +1190,8 @@ configure_cc_switch_provider() {
   API_BASE_URL="$API_BASE_URL" \
   API_KEY="$API_KEY" \
   HAIKU_MODEL="$HAIKU_MODEL" \
+  REASONING_MODEL="$REASONING_MODEL" \
+  SMALL_FAST_MODEL="$SMALL_FAST_MODEL" \
   DEFAULT_MODEL="$DEFAULT_MODEL" \
   python3 - <<'PY'
 import json
@@ -1167,6 +1212,8 @@ provider_name = os.environ["PROVIDER_NAME"]
 api_base_url = os.environ["API_BASE_URL"]
 api_key = os.environ["API_KEY"]
 haiku_model = os.environ["HAIKU_MODEL"]
+reasoning_model = os.environ["REASONING_MODEL"]
+small_fast_model = os.environ["SMALL_FAST_MODEL"]
 default_model = os.environ["DEFAULT_MODEL"]
 now_ms = int(time.time() * 1000)
 
@@ -1175,9 +1222,11 @@ settings_config = {
         "ANTHROPIC_API_KEY": api_key,
         "ANTHROPIC_BASE_URL": api_base_url,
         "ANTHROPIC_MODEL": default_model,
+        "ANTHROPIC_REASONING_MODEL": reasoning_model,
         "ANTHROPIC_DEFAULT_HAIKU_MODEL": haiku_model,
         "ANTHROPIC_DEFAULT_SONNET_MODEL": default_model,
         "ANTHROPIC_DEFAULT_OPUS_MODEL": default_model,
+        "ANTHROPIC_SMALL_FAST_MODEL": small_fast_model,
         "CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC": "1",
     },
     "includeCoAuthoredBy": False,
@@ -1247,6 +1296,36 @@ PY
 
   log "切换 cc-switch provider 并同步 Claude settings。"
   cc-switch --app claude provider switch "$PROVIDER_ID"
+
+  # cc-switch may normalize provider snapshots during switch; keep the full
+  # model mapping visible in the provider record after live sync.
+  PROVIDER_ID="$PROVIDER_ID" \
+  REASONING_MODEL="$REASONING_MODEL" \
+  SMALL_FAST_MODEL="$SMALL_FAST_MODEL" \
+  python3 - <<'PY'
+import json
+import os
+import sqlite3
+from pathlib import Path
+
+db_path = Path(os.environ.get("CC_SWITCH_CONFIG_DIR") or Path.home() / ".cc-switch") / "cc-switch.db"
+provider_id = os.environ["PROVIDER_ID"]
+with sqlite3.connect(db_path) as conn:
+    row = conn.execute(
+        "SELECT settings_config FROM providers WHERE id = ? AND app_type = 'claude'",
+        (provider_id,),
+    ).fetchone()
+    if row:
+        settings = json.loads(row[0])
+        env = settings.setdefault("env", {})
+        env["ANTHROPIC_REASONING_MODEL"] = os.environ["REASONING_MODEL"]
+        env["ANTHROPIC_SMALL_FAST_MODEL"] = os.environ["SMALL_FAST_MODEL"]
+        conn.execute(
+            "UPDATE providers SET settings_config = ? WHERE id = ? AND app_type = 'claude'",
+            (json.dumps(settings, ensure_ascii=False, separators=(",", ":")), provider_id),
+        )
+        conn.commit()
+PY
 }
 
 configure_cc_switch_codex_provider() {
@@ -1304,10 +1383,26 @@ settings_config = {
         "OPENAI_API_KEY": api_key,
     },
     "config": config_toml,
+    "modelCatalog": {
+        "models": [
+            {
+                "model": model,
+                "displayName": model,
+                "contextWindow": 128000,
+            }
+        ]
+    },
 }
 
 meta = {
-    "apiFormat": "openai_responses",
+    "apiFormat": "openai_chat",
+    "codexChatReasoning": {
+        "supportsThinking": True,
+        "supportsEffort": False,
+        "thinkingParam": "thinking",
+        "effortParam": "none",
+        "outputFormat": "reasoning_content",
+    },
 }
 
 with sqlite3.connect(db_path) as conn:
@@ -1369,25 +1464,77 @@ PY
 
   log "切换 cc-switch Codex provider 并同步 Codex config。"
   cc-switch --app codex provider switch "$CODEX_PROVIDER_ID"
-}
 
-enable_proxy_flags_direct() {
-  log "写入 cc-switch 代理接管开关兜底配置。"
-
+  # cc-switch normalizes provider records on switch; restore the local-routing
+  # metadata that the proxy uses to translate Codex Responses to Chat.
+  CODEX_PROVIDER_ID="$CODEX_PROVIDER_ID" \
+  CODEX_MODEL="$CODEX_MODEL" \
   python3 - <<'PY'
+import json
 import os
 import sqlite3
 from pathlib import Path
 
+db_path = Path(os.environ.get("CC_SWITCH_CONFIG_DIR") or Path.home() / ".cc-switch") / "cc-switch.db"
+provider_id = os.environ["CODEX_PROVIDER_ID"]
+model = os.environ["CODEX_MODEL"]
+with sqlite3.connect(db_path) as conn:
+    row = conn.execute(
+        "SELECT settings_config, meta FROM providers WHERE id = ? AND app_type = 'codex'",
+        (provider_id,),
+    ).fetchone()
+    if row:
+        settings = json.loads(row[0])
+        meta = json.loads(row[1] or "{}")
+        settings["modelCatalog"] = {
+            "models": [
+                {
+                    "model": model,
+                    "displayName": model,
+                    "contextWindow": 128000,
+                }
+            ]
+        }
+        meta["apiFormat"] = "openai_chat"
+        meta["codexChatReasoning"] = {
+            "supportsThinking": True,
+            "supportsEffort": False,
+            "thinkingParam": "thinking",
+            "effortParam": "none",
+            "outputFormat": "reasoning_content",
+        }
+        conn.execute(
+            "UPDATE providers SET settings_config = ?, meta = ? WHERE id = ? AND app_type = 'codex'",
+            (
+                json.dumps(settings, ensure_ascii=False, separators=(",", ":")),
+                json.dumps(meta, ensure_ascii=False, separators=(",", ":")),
+                provider_id,
+            ),
+        )
+        conn.commit()
+PY
+}
+
+enable_proxy_flags_direct() {
+  local app_type="${1:-claude}"
+  log "写入 cc-switch ${app_type} 代理接管开关兜底配置。"
+
+  APP_TYPE="$app_type" python3 - <<'PY'
+import os
+import sqlite3
+from pathlib import Path
+
+app_type = os.environ["APP_TYPE"]
 config_dir = Path(os.environ.get("CC_SWITCH_CONFIG_DIR") or Path.home() / ".cc-switch")
 db_path = config_dir / "cc-switch.db"
 if not db_path.exists():
     raise SystemExit(f"cc-switch 数据库不存在：{db_path}")
 
 with sqlite3.connect(db_path) as conn:
-    conn.execute("INSERT OR IGNORE INTO proxy_config (app_type) VALUES ('claude')")
+    conn.execute("INSERT OR IGNORE INTO proxy_config (app_type) VALUES (?)", (app_type,))
     conn.execute(
-        "UPDATE proxy_config SET proxy_enabled = 1, enabled = 1, updated_at = datetime('now') WHERE app_type = 'claude'"
+        "UPDATE proxy_config SET proxy_enabled = 1, enabled = 1, updated_at = datetime('now') WHERE app_type = ?",
+        (app_type,),
     )
     conn.commit()
 
@@ -1442,10 +1589,115 @@ enable_cc_switch_proxy_and_plugin() {
   log "打开 cc-switch Claude 代理接管。"
   if ! cc-switch --app claude proxy enable; then
     warn "cc-switch CLI 打开代理接管失败，使用数据库配置兜底。"
-    enable_proxy_flags_direct
   fi
+  enable_proxy_flags_direct claude
 
   configure_claude_plugin_integration
+}
+
+enable_cc_switch_codex_proxy() {
+  log "打开 cc-switch Codex 代理接管。"
+  if ! cc-switch --app codex proxy enable; then
+    warn "cc-switch CLI 打开 Codex 代理接管失败，使用数据库配置兜底。"
+  fi
+  enable_proxy_flags_direct codex
+  configure_codex_live_proxy_config
+}
+
+configure_codex_live_proxy_config() {
+  log "写入 Codex 本地代理配置。"
+
+  CODEX_PROVIDER_KEY="$CODEX_PROVIDER_KEY" \
+  CODEX_MODEL="$CODEX_MODEL" \
+  python3 - <<'PY'
+import json
+import os
+from pathlib import Path
+
+home = Path.home()
+codex_dir = home / ".codex"
+codex_dir.mkdir(parents=True, exist_ok=True)
+
+provider_key = os.environ["CODEX_PROVIDER_KEY"]
+model = os.environ["CODEX_MODEL"]
+
+config_text = "\n".join([
+    'model_catalog_json = "cc-switch-model-catalog.json"',
+    f'model_provider = "{provider_key}"',
+    f'model = "{model}"',
+    'model_reasoning_effort = "high"',
+    'disable_response_storage = true',
+    '',
+    f'[model_providers.{provider_key}]',
+    'name = "cc-switch"',
+    'base_url = "http://127.0.0.1:15721/v1"',
+    'wire_api = "responses"',
+    'requires_openai_auth = true',
+    '',
+])
+(codex_dir / "config.toml").write_text(config_text, encoding="utf-8")
+(codex_dir / "auth.json").write_text(
+    json.dumps({"OPENAI_API_KEY": "PROXY_MANAGED"}, ensure_ascii=False, indent=2) + "\n",
+    encoding="utf-8",
+)
+
+template = None
+try:
+    import subprocess
+
+    raw = subprocess.check_output(["codex", "debug", "models", "--bundled"], timeout=20)
+    bundled = json.loads(raw)
+    models = bundled if isinstance(bundled, list) else bundled.get("models", [])
+    if models:
+        template = dict(models[0])
+except Exception:
+    template = None
+
+if template is None:
+    template = {
+        "slug": model,
+        "display_name": model,
+        "description": model,
+        "default_reasoning_level": "high",
+        "supported_reasoning_levels": [
+            {"effort": "low", "description": "Low reasoning"},
+            {"effort": "medium", "description": "Medium reasoning"},
+            {"effort": "high", "description": "High reasoning"},
+        ],
+        "supports_reasoning_summaries": False,
+        "shell_type": "shell_command",
+        "visibility": "list",
+        "supported_in_api": True,
+        "priority": 1000,
+        "additional_speed_tiers": [],
+        "service_tiers": [],
+        "availability_nux": None,
+        "upgrade": None,
+        "base_instructions": "",
+        "model_messages": {},
+        "context_window": 128000,
+        "max_context_window": 128000,
+    }
+else:
+    template["slug"] = model
+    template["display_name"] = model
+    template["description"] = model
+    template["context_window"] = 128000
+    template["max_context_window"] = 128000
+    template["priority"] = 1000
+    template["additional_speed_tiers"] = []
+    template["service_tiers"] = []
+    template["availability_nux"] = None
+    template["upgrade"] = None
+
+(codex_dir / "cc-switch-model-catalog.json").write_text(
+    json.dumps({"models": [template]}, ensure_ascii=False, indent=2) + "\n",
+    encoding="utf-8",
+)
+print(codex_dir / "config.toml")
+print(codex_dir / "auth.json")
+print(codex_dir / "cc-switch-model-catalog.json")
+PY
 }
 
 setup_claude_first_run_state() {
@@ -1454,6 +1706,8 @@ setup_claude_first_run_state() {
   API_BASE_URL="$API_BASE_URL" \
   API_KEY="$API_KEY" \
   HAIKU_MODEL="$HAIKU_MODEL" \
+  REASONING_MODEL="$REASONING_MODEL" \
+  SMALL_FAST_MODEL="$SMALL_FAST_MODEL" \
   DEFAULT_MODEL="$DEFAULT_MODEL" \
   python3 - <<'PY'
 import json
@@ -1496,9 +1750,11 @@ if not isinstance(env, dict):
 env["ANTHROPIC_API_KEY"] = os.environ["API_KEY"]
 env["ANTHROPIC_BASE_URL"] = os.environ["API_BASE_URL"]
 env["ANTHROPIC_MODEL"] = os.environ["DEFAULT_MODEL"]
+env["ANTHROPIC_REASONING_MODEL"] = os.environ["REASONING_MODEL"]
 env["ANTHROPIC_DEFAULT_HAIKU_MODEL"] = os.environ["HAIKU_MODEL"]
 env["ANTHROPIC_DEFAULT_SONNET_MODEL"] = os.environ["DEFAULT_MODEL"]
 env["ANTHROPIC_DEFAULT_OPUS_MODEL"] = os.environ["DEFAULT_MODEL"]
+env["ANTHROPIC_SMALL_FAST_MODEL"] = os.environ["SMALL_FAST_MODEL"]
 env["CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC"] = "1"
 settings["env"] = env
 settings_path.write_text(json.dumps(settings, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
@@ -1534,6 +1790,7 @@ main() {
   fi
   if wants_codex; then
     configure_cc_switch_codex_provider
+    enable_cc_switch_codex_proxy
   fi
   write_management_scripts
 
