@@ -131,70 +131,21 @@ codex-uninstall --agent both
 
 卸载会移除对应 agent 的 `ictrek` provider；Claude 卸载会关闭 Claude 代理接管和 VS Code Claude 插件接管，并卸载官方 Claude Code npm 包；Codex 卸载会清理本方案写入的 Codex 配置，并卸载 Codex 和 chat-codex npm 包。它不会删除 cc-switch 本体和 `~/.cc-switch` 里的其它 provider。
 
-### 方案二：cc-haha（macOS / Linux）
+### ~~方案二：cc-haha（macOS / Linux）~~
 
-这个方案安装 `NanmiCoder/cc-haha`，并写入 `claude`、`claude-haha`、`claude-env`、`claude-update`、`claude-uninstall`。
+> 已停止维护。新安装请使用方案一：cc-switch + 官方 Claude Code / Codex。
 
-安装：
+~~这个方案安装 `NanmiCoder/cc-haha`，并写入 `claude`、`claude-haha`、`claude-env`、`claude-update`、`claude-uninstall`。~~
 
-```bash
-bash <(curl -LfsS https://raw.githubusercontent.com/huluxiaohuowa/cc_setup/main/cc_setup_unix.sh || curl -LfsS https://ghfast.top/https://raw.githubusercontent.com/huluxiaohuowa/cc_setup/main/cc_setup_unix.sh)
-```
+~~安装、配置、更新、卸载命令不再维护。~~
 
-fish shell 可以执行：
+~~旧安装已存在时，可以继续自行使用 `claude-env`、`claude-update`、`claude-uninstall`。~~
 
-```fish
-bash -lc 'bash <(curl -LfsS https://raw.githubusercontent.com/huluxiaohuowa/cc_setup/main/cc_setup_unix.sh || curl -LfsS https://ghfast.top/https://raw.githubusercontent.com/huluxiaohuowa/cc_setup/main/cc_setup_unix.sh)'
-```
+### ~~Windows（cc-haha）~~
 
-配置方式：
+> 已停止维护。Windows 旧安装方式不再推荐。
 
-```bash
-claude-env
-```
-
-`claude-env` 会打开 cc-haha 安装目录中的 `.env`。修改保存后重新打开终端或重新运行命令即可。
-
-常用命令：
-
-```bash
-claude --help
-claude-haha --help
-claude -p "hello"
-```
-
-更新：
-
-```bash
-claude-update
-```
-
-卸载：
-
-```bash
-claude-uninstall
-```
-
-### Windows（cc-haha）
-
-在 PowerShell 中执行：
-
-```powershell
-$script = Join-Path $env:TEMP "cc_setup_win.ps1"
-$url = "https://raw.githubusercontent.com/huluxiaohuowa/cc_setup/main/cc_setup_win.ps1"
-$fastUrl = "https://ghfast.top/https://raw.githubusercontent.com/huluxiaohuowa/cc_setup/main/cc_setup_win.ps1"
-try { Invoke-WebRequest -Uri $url -OutFile $script -UseBasicParsing } catch { Invoke-WebRequest -Uri $fastUrl -OutFile $script -UseBasicParsing }
-powershell -NoProfile -ExecutionPolicy Bypass -File $script
-```
-
-配置、更新、卸载：
-
-```powershell
-claude
-claude-env
-claude-update
-claude-uninstall
-```
+~~PowerShell 安装、配置、更新、卸载命令不再维护。~~
 
 ## digital-workers / skills 安装
 
