@@ -663,22 +663,40 @@ install_claude_code_if_needed() {
 install_codex_if_needed() {
   if need_cmd codex; then
     log "Codex CLI 已存在：$(command -v codex)"
+  else
+    setup_user_npm_prefix
+
+    log "安装 Codex CLI 到用户目录：npm install -g @openai/codex"
+    npm install -g @openai/codex
+
+    hash -r 2>/dev/null || true
+
+    if ! need_cmd codex; then
+      err "Codex CLI 安装后未找到 codex 命令，请检查 ~/.local/npm/bin 是否在 PATH 中。"
+      exit 1
+    fi
+
+    log "Codex CLI 安装完成：$(command -v codex)"
+  fi
+
+  if need_cmd chat-codex; then
+    log "chat-codex 已存在：$(command -v chat-codex)"
     return 0
   fi
 
   setup_user_npm_prefix
 
-  log "安装 Codex CLI 到用户目录：npm install -g @openai/codex"
-  npm install -g @openai/codex
+  log "安装 chat-codex 到用户目录：npm install -g chat-codex"
+  npm install -g chat-codex
 
   hash -r 2>/dev/null || true
 
-  if ! need_cmd codex; then
-    err "Codex CLI 安装后未找到 codex 命令，请检查 ~/.local/npm/bin 是否在 PATH 中。"
+  if ! need_cmd chat-codex; then
+    err "chat-codex 安装后未找到 chat-codex 命令，请检查 ~/.local/npm/bin 是否在 PATH 中。"
     exit 1
   fi
 
-  log "Codex CLI 安装完成：$(command -v codex)"
+  log "chat-codex 安装完成：$(command -v chat-codex)"
 }
 
 install_cc_switch_if_needed() {
@@ -1112,6 +1130,13 @@ uninstall_codex_cli() {
     npm uninstall -g @openai/codex
   else
     warn "未检测到全局 @openai/codex，跳过 npm 卸载。"
+  fi
+
+  if npm list -g chat-codex --depth=0 >/dev/null 2>&1; then
+    log "卸载 chat-codex npm 包。"
+    npm uninstall -g chat-codex
+  else
+    warn "未检测到全局 chat-codex，跳过 npm 卸载。"
   fi
 }
 
