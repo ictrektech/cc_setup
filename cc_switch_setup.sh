@@ -13,10 +13,28 @@ RTK_INSTALL_URLS=(
 )
 RTK_BIN_DIR="$HOME/.local/bin"
 
+normalize_api_key() {
+  local value="${1:-}"
+  value="${value//$'\r'/}"
+  value="${value//$'\n'/}"
+  value="${value#"${value%%[![:space:]]*}"}"
+  value="${value%"${value##*[![:space:]]}"}"
+
+  # Common shell typo: CC_SWITCH_API_KEY="sk-..."bash script.sh
+  # Without a separator, bash appends the command name to the env value.
+  case "$value" in
+    sk-*bash)
+      value="${value%bash}"
+      ;;
+  esac
+
+  printf '%s' "$value"
+}
+
 PROVIDER_ID="ictrek"
 PROVIDER_NAME="ICTrek"
 API_BASE_URL="https://ai.ictrek.com"
-API_KEY="${CC_SWITCH_API_KEY:-${API_KEY:-dummy-keys}}"
+API_KEY="$(normalize_api_key "${CC_SWITCH_API_KEY:-${API_KEY:-dummy-keys}}")"
 HAIKU_MODEL="volces/DeepSeek-V4-Flash"
 DEFAULT_MODEL="volces/GLM-5.1"
 INSTALL_RTK="${CC_SWITCH_INSTALL_RTK:-${INSTALL_RTK:-0}}"
@@ -26,7 +44,7 @@ CODEX_PROVIDER_ID="${CC_SWITCH_CODEX_PROVIDER_ID:-$PROVIDER_ID}"
 CODEX_PROVIDER_NAME="${CC_SWITCH_CODEX_PROVIDER_NAME:-$PROVIDER_NAME Codex}"
 CODEX_PROVIDER_KEY="${CC_SWITCH_CODEX_PROVIDER_KEY:-custom}"
 CODEX_API_BASE_URL="${CC_SWITCH_CODEX_API_BASE_URL:-${API_BASE_URL%/}/v1}"
-CODEX_API_KEY="${CC_SWITCH_CODEX_API_KEY:-$API_KEY}"
+CODEX_API_KEY="$(normalize_api_key "${CC_SWITCH_CODEX_API_KEY:-$API_KEY}")"
 CODEX_MODEL="${CC_SWITCH_CODEX_MODEL:-$DEFAULT_MODEL}"
 CODEX_WIRE_API="${CC_SWITCH_CODEX_WIRE_API:-responses}"
 
@@ -1433,6 +1451,10 @@ enable_cc_switch_proxy_and_plugin() {
 setup_claude_first_run_state() {
   log "关闭 Claude Code 首次打开登录/引导验证。"
 
+  API_BASE_URL="$API_BASE_URL" \
+  API_KEY="$API_KEY" \
+  HAIKU_MODEL="$HAIKU_MODEL" \
+  DEFAULT_MODEL="$DEFAULT_MODEL" \
   python3 - <<'PY'
 import json
 import os
@@ -1471,6 +1493,12 @@ if not isinstance(settings, dict):
 env = settings.get("env")
 if not isinstance(env, dict):
     env = {}
+env["ANTHROPIC_API_KEY"] = os.environ["API_KEY"]
+env["ANTHROPIC_BASE_URL"] = os.environ["API_BASE_URL"]
+env["ANTHROPIC_MODEL"] = os.environ["DEFAULT_MODEL"]
+env["ANTHROPIC_DEFAULT_HAIKU_MODEL"] = os.environ["HAIKU_MODEL"]
+env["ANTHROPIC_DEFAULT_SONNET_MODEL"] = os.environ["DEFAULT_MODEL"]
+env["ANTHROPIC_DEFAULT_OPUS_MODEL"] = os.environ["DEFAULT_MODEL"]
 env["CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC"] = "1"
 settings["env"] = env
 settings_path.write_text(json.dumps(settings, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
