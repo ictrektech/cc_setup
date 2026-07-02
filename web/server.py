@@ -18,7 +18,7 @@ import time
 import uuid
 from collections import deque
 from pathlib import Path
-from urllib.parse import parse_qs, urlparse
+from urllib.parse import parse_qs, urlparse, unquote_plus
 
 ROOT = Path(__file__).resolve().parent
 PUBLIC = ROOT / "public"
@@ -1155,31 +1155,12 @@ def login_page():
 <body>
   <main>
     <h1>Agent Room</h1>
-    <p>输入当前服务用户的访问 token。可在服务器任意目录运行 <code>cat ~/.agentroom/token</code> 查询。</p>
-    <form id="loginForm">
-      <label>Token <input id="token" type="password" autocomplete="current-password" autofocus></label>
+    <p>输入访问 token 登录。</p>
+    <form id="loginForm" method="post" action="api/agent-room-login">
+      <label>Token <input name="token" type="password" autocomplete="current-password" autofocus></label>
       <button type="submit">进入</button>
-      <div id="error" class="error"></div>
     </form>
   </main>
-  <script>
-    document.querySelector("#loginForm").addEventListener("submit", async (event) => {
-      event.preventDefault();
-      const error = document.querySelector("#error");
-      error.textContent = "";
-      const response = await fetch("/api/login", {
-        method: "POST",
-        headers: {"Content-Type": "application/json"},
-        body: JSON.stringify({token: document.querySelector("#token").value})
-      });
-      if (response.ok) {
-        location.href = "/";
-        return;
-      }
-      const data = await response.json().catch(() => ({}));
-      error.textContent = data.error || "登录失败";
-    });
-  </script>
 </body>
 </html>"""
 
@@ -1224,15 +1205,16 @@ class Handler(http.server.SimpleHTTPRequestHandler):
         return verify_session_cookie(cookies.get(AUTH_COOKIE))
 
     def require_auth(self, parsed):
-        if parsed.path in {"/login", "/api/login", "/api/auth"}:
+        if parsed.path in {"/agent-room-login", "/api/agent-room-login", "/api/auth", "/api/health"}:
             return True
         if self.is_authenticated():
             return True
         if parsed.path.startswith("/api/") or parsed.path == "/ws":
             json_response(self, 401, {"ok": False, "error": "需要登录"})
             return False
+        prefix = self.headers.get("X-Forwarded-Prefix", "")
         self.send_response(302)
-        self.send_header("Location", "/login")
+        self.send_header("Location", prefix + "/agent-room-login")
         self.send_header("Content-Length", "0")
         self.end_headers()
         return False
@@ -1252,7 +1234,7 @@ class Handler(http.server.SimpleHTTPRequestHandler):
         parsed = urlparse(self.path)
         if not self.require_auth(parsed):
             return
-        if parsed.path == "/login":
+        if parsed.path == "/agent-room-login":
             if self.is_authenticated():
                 self.send_response(302)
                 self.send_header("Location", "/")
@@ -1279,18 +1261,24 @@ class Handler(http.server.SimpleHTTPRequestHandler):
 
     def do_POST(self):
         parsed = urlparse(self.path)
-        if parsed.path == "/api/login":
-            body = read_json(self)
-            token = str(body.get("token") or "")
+        if parsed.path == "/api/agent-room-login":
+            content_type = self.headers.get("Content-Type", "")
+            if "application/x-www-form-urlencoded" in content_type:
+                length = int(self.headers.get("Content-Length", "0") or "0")
+                raw = self.rfile.read(length).decode("utf-8") if length else ""
+                params = dict(pair.split("=", 1) for pair in raw.split("&") if "=" in pair)
+                token = unquote_plus(params.get("token", ""))
+            else:
+                body = read_json(self)
+                token = str(body.get("token") or "")
             if not hmac.compare_digest(token, get_auth_token()):
                 return json_response(self, 401, {"ok": False, "error": "token 不正确"})
-            payload = json.dumps({"ok": True}, ensure_ascii=False).encode("utf-8")
-            self.send_response(200)
-            self.send_header("Content-Type", "application/json; charset=utf-8")
+            prefix = self.headers.get("X-Forwarded-Prefix", "")
+            self.send_response(302)
+            self.send_header("Location", prefix + "/")
             self.set_auth_cookie()
-            self.send_header("Content-Length", str(len(payload)))
+            self.send_header("Content-Length", "0")
             self.end_headers()
-            self.wfile.write(payload)
             return
         if not self.require_auth(parsed):
             return

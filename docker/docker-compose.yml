@@ -1,0 +1,53 @@
+# =============================================================================
+# agent-room Docker Compose
+# =============================================================================
+# 使用 build_images.sh 构建后启动：
+#   docker compose up -d
+#
+# 停止：
+#   docker compose down
+# =============================================================================
+
+services:
+  agent-room:
+    # ---- 镜像（由 build_images.sh 构建并推送） ----
+    image: swr.cn-southwest-2.myhuaweicloud.com/ictrek/agent-room:latest
+
+    # 如需从源码直接构建（而非使用预构建镜像），取消下面注释：
+    # build:
+    #   context: ..
+    #   dockerfile: docker/Dockerfile
+
+    container_name: agent-room
+
+    # ---- 网络 ----
+    # 使用宿主机网络，让容器内的 claude 进程能连接宿主机上的 cc-switch 代理
+    #（cc-switch 代理监听 127.0.0.1:15721）或通过 cc-switch 环境变量直连外部 API。
+    network_mode: host
+
+    # ---- 环境变量 ----
+    environment:
+      # agent-room 端口（host 网络下容器直接占用宿主机 6004）
+      - PORT=6004
+      # 禁用 Claude Code 遥测
+      - DISABLE_TELEMETRY=1
+      - CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC=1
+      # 确保 HOME 指向挂载的 ~/.claude 能找到 settings.json
+      - HOME=/root
+
+    # ---- 卷挂载 ----
+    volumes:
+      # Claude 配置（含 API Key、Endpoint、模型配置 — 由 cc-switch 管理）
+      - ~/.claude:/root/.claude:ro
+      # 工作目录 — 挂载用户 home，前端传入的任何项目路径都能访问
+      - ~:/home/ictrek:ro
+
+    # ---- 重启策略 ----
+    restart: unless-stopped
+
+    # ---- 日志 ----
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "3"

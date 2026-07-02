@@ -78,7 +78,8 @@ state.activeId = localStorage.getItem(ACTIVE_SESSION_STORAGE_KEY) || null;
 setTheme(localStorage.getItem(THEME_STORAGE_KEY) || "light");
 
 async function request(path, options = {}) {
-  const response = await fetch(path, {
+  const basePath = new URL(document.baseURI).pathname.replace(/\/$/, "");
+  const response = await fetch(basePath + path, {
     headers: { "Content-Type": "application/json" },
     ...options
   });
@@ -171,7 +172,8 @@ function renderSessions() {
 function connect(sessionId) {
   if (state.socket) state.socket.close();
   const protocol = location.protocol === "https:" ? "wss" : "ws";
-  const socket = new WebSocket(`${protocol}://${location.host}/ws?sessionId=${sessionId}`);
+  const basePath = new URL(document.baseURI).pathname.replace(/\/$/, "");
+  const socket = new WebSocket(`${protocol}://${location.host}${basePath}/ws?sessionId=${sessionId}`);
   state.socket = socket;
 
   socket.addEventListener("message", (event) => {
