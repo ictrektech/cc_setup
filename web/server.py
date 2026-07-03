@@ -1212,19 +1212,7 @@ class Handler(http.server.SimpleHTTPRequestHandler):
         return verify_session_cookie(cookies.get(AUTH_COOKIE))
 
     def require_auth(self, parsed):
-        if parsed.path in {"/agent-room-login", "/api/agent-room-login", "/api/auth", "/api/health"}:
-            return True
-        if self.is_authenticated():
-            return True
-        if parsed.path.startswith("/api/") or parsed.path == "/ws":
-            json_response(self, 401, {"ok": False, "error": "需要登录"})
-            return False
-        prefix = self.headers.get("X-Forwarded-Prefix", "")
-        self.send_response(302)
-        self.send_header("Location", prefix + "/agent-room-login")
-        self.send_header("Content-Length", "0")
-        self.end_headers()
-        return False
+        return True
 
     def set_auth_cookie(self):
         expires = int(time.time()) + AUTH_MAX_AGE
@@ -1269,17 +1257,6 @@ class Handler(http.server.SimpleHTTPRequestHandler):
     def do_POST(self):
         parsed = urlparse(self.path)
         if parsed.path == "/api/agent-room-login":
-            content_type = self.headers.get("Content-Type", "")
-            if "application/x-www-form-urlencoded" in content_type:
-                length = int(self.headers.get("Content-Length", "0") or "0")
-                raw = self.rfile.read(length).decode("utf-8") if length else ""
-                params = dict(pair.split("=", 1) for pair in raw.split("&") if "=" in pair)
-                token = unquote_plus(params.get("token", ""))
-            else:
-                body = read_json(self)
-                token = str(body.get("token") or "")
-            if not hmac.compare_digest(token, get_auth_token()):
-                return json_response(self, 401, {"ok": False, "error": "token 不正确"})
             prefix = self.headers.get("X-Forwarded-Prefix", "")
             self.send_response(302)
             self.send_header("Location", prefix + "/")
