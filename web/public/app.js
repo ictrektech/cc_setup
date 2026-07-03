@@ -85,8 +85,7 @@ async function request(path, options = {}) {
   });
   const data = await response.json().catch(() => ({}));
   if (response.status === 401) {
-    location.href = "/login";
-    throw new Error(data.error || "需要登录");
+    location.href = basePath + "/agent-room-login";
   }
   if (!response.ok) throw new Error(data.error || response.statusText);
   return data;
@@ -1162,7 +1161,8 @@ async function logout() {
     // Even if the session already expired, send the user back to the login screen.
   } finally {
     if (state.socket) state.socket.close();
-    location.href = "/login";
+    const basePath = new URL(document.baseURI).pathname.replace(/\/$/, "");
+    location.href = basePath + "/agent-room-login";
   }
 }
 

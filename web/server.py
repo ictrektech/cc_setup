@@ -427,6 +427,12 @@ def normalize_cwd(value):
         return os.getcwd()
     return str(Path(os.path.expanduser(value)).resolve())
 
+def derive_home(cwd):
+    parts = Path(cwd).parts
+    if len(parts) >= 3 and parts[0] == '/' and parts[1] == 'home':
+        return f'/home/{parts[2]}'
+    return os.environ.get('HOME', '/root')
+
 
 def resize_pty(fd, cols, rows):
     import fcntl
@@ -651,6 +657,7 @@ class Session:
             close_fds=True,
             env={
                 **os.environ,
+                "HOME": derive_home(self.cwd),
                 "TERM": "xterm-256color",
                 "COLORTERM": "truecolor",
             },
@@ -728,7 +735,7 @@ class Session:
                 stderr=subprocess.STDOUT,
                 text=True,
                 bufsize=1,
-                env={**os.environ, "TERM": "dumb", "NO_COLOR": "1"},
+                env={**os.environ, "HOME": derive_home(self.cwd), "TERM": "dumb", "NO_COLOR": "1"},
                 preexec_fn=os.setsid if hasattr(os, "setsid") else None,
             )
             timed_out = False
@@ -913,7 +920,7 @@ class Session:
                 stderr=subprocess.STDOUT,
                 text=True,
                 bufsize=1,
-                env={**os.environ, "TERM": "dumb", "NO_COLOR": "1"},
+                env={**os.environ, "HOME": derive_home(self.cwd), "TERM": "dumb", "NO_COLOR": "1"},
                 preexec_fn=os.setsid if hasattr(os, "setsid") else None,
             )
             timed_out = False
