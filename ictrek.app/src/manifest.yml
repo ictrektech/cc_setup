@@ -1,0 +1,41 @@
+# =============================================================================
+# Agent Room — VOS 应用定义包源文件
+# =============================================================================
+# 打包:
+#   cd src/ && tar czf ../dist/app.tar.gz manifest.yml docker-compose.yml \
+#     configs.yml routers.yml icon.png README.zh-CN.md
+# =============================================================================
+
+id: com.ictrek.agent-room
+name:
+  zh-CN: Agent Room
+  en: Agent Room
+description:
+  zh-CN: Claude / Codex AI Agent 远程管理控制台，通过 Web 浏览器创建、监控和管理 AI Agent 会话。
+  en: A remote web console for managing Claude / Codex AI agent sessions.
+version: 0.1.0
+author: ICTrek
+category: [ai]
+arch: [arm64]
+
+platform:
+  version: ">=3.0.0"
+
+assets:
+  - filename: agent-room.tar.gz
+    kind: docker-archive
+    arch: host
+
+frontend:
+  enabled: true
+  basePath: /app/com.ictrek.agent-room
+  service: agent-room
+
+storage:
+  directories:
+    - path: data
+      mode: "0755"
+    - path: config
+      uid: 1000
+      gid: 1000
+      mode: "0700"

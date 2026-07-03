@@ -1,0 +1,95 @@
+# =============================================================================
+# Agent Room — 声明式配置定义
+# =============================================================================
+# 用户在 VOS 平台安装时，会看到这些配置项的表单。
+# =============================================================================
+
+configs:
+  # ---------------------------------------------------------------
+  # Claude API 认证
+  # ---------------------------------------------------------------
+  - name: ANTHROPIC_API_KEY
+    type: string
+    title:
+      zh-CN: Claude API Key
+      en: Claude API Key
+    description:
+      zh-CN: Anthropic API 密钥（x-api-key 认证）。与 Bearer Token 二选一。
+      en: Anthropic API key (x-api-key auth). Mutually exclusive with Bearer Token.
+    default: ""
+
+  - name: ANTHROPIC_AUTH_TOKEN
+    type: string
+    title:
+      zh-CN: Claude Bearer Token
+      en: Claude Bearer Token
+    description:
+      zh-CN: Anthropic Bearer Token 认证（Authorization 头）。与 API Key 二选一。
+      en: Anthropic Bearer Token (Authorization header). Mutually exclusive with API Key.
+    default: ""
+
+  # ---------------------------------------------------------------
+  # Claude API 端点
+  # ---------------------------------------------------------------
+  - name: ANTHROPIC_BASE_URL
+    type: string
+    title:
+      zh-CN: API 端点
+      en: API Endpoint
+    description:
+      zh-CN: Anthropic API 地址，默认为官方地址。可填写兼容代理地址。
+      en: Anthropic API base URL. Defaults to official endpoint.
+    default: https://api.anthropic.com
+
+  # ---------------------------------------------------------------
+  # 模型配置
+  # ---------------------------------------------------------------
+  - name: ANTHROPIC_MODEL
+    type: string
+    title:
+      zh-CN: 默认模型
+      en: Default Model
+    description:
+      zh-CN: 默认使用的 Claude 模型 ID
+      en: Default Claude model ID
+    default: claude-sonnet-5-20250610
+
+  - name: ANTHROPIC_HAIKU_MODEL
+    type: string
+    title:
+      zh-CN: Haiku 模型
+      en: Haiku Model
+    description:
+      zh-CN: 轻量快速模型 ID
+      en: Lightweight fast model ID
+    default: claude-haiku-4-5-20251001
+
+  # ---------------------------------------------------------------
+  # 服务端口
+  # ---------------------------------------------------------------
+  - name: AGENT_ROOM_PORT
+    type: integer
+    title:
+      zh-CN: 服务端口
+      en: Service Port
+    description:
+      zh-CN: Agent Room Web 服务监听端口
+      en: Agent Room web service listening port
+    default: 6004
+    minimum: 1024
+    maximum: 65535
+
+  # ---------------------------------------------------------------
+  # 认证 Token（可选）
+  # ---------------------------------------------------------------
+  - name: AGENT_ROOM_TOKEN
+    type: string
+    title:
+      zh-CN: 访问 Token
+      en: Access Token
+    description:
+      zh-CN: Web 控制台登录 Token。留空则自动生成并持久化到 storage。
+      en: Web console login token. Leave empty to auto-generate.
+    default: ""
+    minLength: 0
+    maxLength: 128

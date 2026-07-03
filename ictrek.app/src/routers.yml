@@ -1,0 +1,23 @@
+# =============================================================================
+# Agent Room — 前端导航路由
+# =============================================================================
+# 注册到 VOS 平台侧边栏，通过同域 iframe 加载 Agent Room 页面。
+# =============================================================================
+
+routers:
+  - id: agent-room
+    kind: group
+    title:
+      zh-CN: Agent Room
+      en: Agent Room
+    icon: lucide:bot
+    order: 200
+    children:
+      - id: dashboard
+        kind: page
+        title:
+          zh-CN: 控制台
+          en: Console
+        icon: lucide:terminal
+        iframe-src: /app/com.ictrek.agent-room/index.html
+        order: 10
