@@ -1,34 +1,38 @@
+x-agent-room-base: &agent-room-base
+  restart: unless-stopped
+  networks:
+    - vos_default
+  ports:
+    - "${AGENT_ROOM_PORT:-6004}:6004"
+  environment:
+    - PORT=6004
+    - AGENTROOM_TOKEN=${AGENT_ROOM_TOKEN:-}
+    - AGENTROOM_AUTH_DIR=/app/storage/config
+    - AGENTROOM_SESSIONS_PATH=/app/storage/data/sessions.json
+    - ANTHROPIC_API_KEY=${ANTHROPIC_API_KEY:-}
+    - ANTHROPIC_AUTH_TOKEN=${ANTHROPIC_AUTH_TOKEN:-}
+    - ANTHROPIC_BASE_URL=${ANTHROPIC_BASE_URL:-https://api.anthropic.com}
+    - ANTHROPIC_MODEL=${ANTHROPIC_MODEL:-claude-sonnet-5-20250610}
+    - DISABLE_TELEMETRY=1
+    - CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC=1
+  volumes:
+    - ${VOS_APP_STORAGE_PATH}/data:/app/storage/data
+    - ${VOS_APP_STORAGE_PATH}/config:/app/storage/config
+  labels:
+    - "traefik.enable=true"
+    - "traefik.docker.network=vos_default"
+    - "traefik.http.routers.agent-room-web.rule=PathPrefix(`/app/com.ictrek.agent-room`)"
+    - "traefik.http.routers.agent-room-web.service=agent-room-web"
+    - "traefik.http.routers.agent-room-web.middlewares=agent-room-web-strip"
+    - "traefik.http.middlewares.agent-room-web-strip.stripprefix.prefixes=/app/com.ictrek.agent-room"
+    - "traefik.http.services.agent-room-web.loadbalancer.server.port=6004"
+
 services:
-  agent-room:
-    image: __IMAGE__
-__PULL_POLICY__
-    restart: unless-stopped
-    networks:
-      - vos_default
-    ports:
-      - "${AGENT_ROOM_PORT:-6004}:6004"
-    environment:
-      - PORT=6004
-      - AGENTROOM_TOKEN=${AGENT_ROOM_TOKEN:-}
-      - AGENTROOM_AUTH_DIR=/app/storage/config
-      - AGENTROOM_SESSIONS_PATH=/app/storage/data/sessions.json
-      - ANTHROPIC_API_KEY=${ANTHROPIC_API_KEY:-}
-      - ANTHROPIC_AUTH_TOKEN=${ANTHROPIC_AUTH_TOKEN:-}
-      - ANTHROPIC_BASE_URL=${ANTHROPIC_BASE_URL:-https://api.anthropic.com}
-      - ANTHROPIC_MODEL=${ANTHROPIC_MODEL:-claude-sonnet-5-20250610}
-      - DISABLE_TELEMETRY=1
-      - CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC=1
-    volumes:
-      - ${VOS_APP_STORAGE_PATH}/data:/app/storage/data
-      - ${VOS_APP_STORAGE_PATH}/config:/app/storage/config
-    labels:
-      - "traefik.enable=true"
-      - "traefik.docker.network=vos_default"
-      - "traefik.http.routers.agent-room-web.rule=PathPrefix(`/app/com.ictrek.agent-room`)"
-      - "traefik.http.routers.agent-room-web.service=agent-room-web"
-      - "traefik.http.routers.agent-room-web.middlewares=agent-room-web-strip"
-      - "traefik.http.middlewares.agent-room-web-strip.stripprefix.prefixes=/app/com.ictrek.agent-room"
-      - "traefik.http.services.agent-room-web.loadbalancer.server.port=6004"
+  agent-room-amd:
+    <<: *agent-room-base
+    profiles: ["amd"]
+    image: ${AGENT_ROOM_AMD_IMAGE}
+    pull_policy: always
 
 networks:
   vos_default:
