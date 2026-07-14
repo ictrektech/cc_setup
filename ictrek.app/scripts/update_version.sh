@@ -11,8 +11,9 @@ usage() {
 Usage:
   ./scripts/update_version.sh [patch|minor|major]
 
-Updates ictrek.app/VERSION, commits it, creates a VOS release tag, and pushes
-the branch and tag. GitHub Actions builds and publishes the pull-mode tar.
+Updates ictrek.app/VERSION, commits it, creates a VOS CI trigger tag, and
+pushes the branch and tag. GitHub Actions publishes the pull-mode tar on a
+standard SemVer release tag.
 Commit application code changes before running this script.
 EOF
 }
@@ -45,8 +46,13 @@ git diff --quiet && git diff --cached --quiet || {
 
 version="$(bump_version "$part")"
 tag="${TAG_PREFIX}${version}"
+public_tag="v${version}"
 git rev-parse -q --verify "refs/tags/${tag}" >/dev/null && {
   echo "tag already exists: ${tag}" >&2
+  exit 1
+}
+git rev-parse -q --verify "refs/tags/${public_tag}" >/dev/null && {
+  echo "public release tag already exists: ${public_tag}" >&2
   exit 1
 }
 
@@ -58,4 +64,4 @@ branch="$(git branch --show-current)"
 git push origin "$branch"
 git push origin "$tag"
 
-echo "Pushed ${tag}. GitHub Actions will build the pull tar and create the release."
+echo "Pushed ${tag}. GitHub Actions will build the pull tar and create release ${public_tag}."

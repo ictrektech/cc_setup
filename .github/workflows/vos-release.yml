@@ -43,8 +43,11 @@ jobs:
           TAG_PREFIX: vos-agent-room-v
         run: |
           set -euo pipefail
+          VERSION="${GITHUB_REF_NAME#vos-agent-room-v}"
           CURRENT="${GITHUB_REF_NAME}"
-          PREVIOUS="$(gh release list --limit 100 --json tagName,publishedAt --jq '[.[] | select(.tagName | startswith(env.TAG_PREFIX)) | select(.tagName != env.CURRENT)] | sort_by(.publishedAt) | reverse | .[0].tagName // ""')"
+          PUBLIC_TAG="v${VERSION}"
+          export PUBLIC_TAG
+          PREVIOUS="$(gh release list --limit 100 --json tagName,publishedAt --jq '[.[] | select(.tagName != env.PUBLIC_TAG) | select((.tagName | startswith("v")) or (.tagName | startswith(env.TAG_PREFIX)))] | sort_by(.publishedAt) | reverse | .[0].tagName // ""')"
           {
             echo "Pull-mode VOS app package for com.ictrek.agent-room."
             echo
@@ -62,6 +65,13 @@ jobs:
           GH_TOKEN: ${{ github.token }}
         run: |
           VERSION="${GITHUB_REF_NAME#vos-agent-room-v}"
-          gh release create "$GITHUB_REF_NAME" "ictrek.app/dist/agent-room_${VERSION}_pull.tar" \
-            --title "VOS Agent Room ${VERSION}" \
+          PUBLIC_TAG="v${VERSION}"
+          if ! git ls-remote --exit-code --tags origin "refs/tags/${PUBLIC_TAG}" >/dev/null 2>&1; then
+            git tag "$PUBLIC_TAG" "$GITHUB_SHA"
+            git push origin "$PUBLIC_TAG"
+          fi
+          gh release create "$PUBLIC_TAG" "ictrek.app/dist/agent-room_${VERSION}_pull.tar" \
+            --verify-tag \
+            --latest \
+            --title "VOS Agent Room v${VERSION}" \
             --notes-file release-notes.md
