@@ -34,7 +34,7 @@ dist/agent-room_${VERSION}_pull.tar
 - 使用 tag 中的版本号作为 `PACKAGE_VERSION` 调用 `package.sh`，生成 `dist/agent-room_${VERSION}_pull.tar`。
 - 读取 `~/.feishu.components.json` 所需的 GitHub Secrets：`FEISHU_APP_ID`、`FEISHU_APP_SECRET`，可选 `FEISHU_SPREADSHEET_TOKEN`。
 - 查找上一个 VOS release tag，把两个 tag 之间的提交记录写入 release notes。
-- 创建标准 SemVer GitHub release tag `v${VERSION}`，标题使用 `VOS Agent Room v${VERSION}`，并上传 pull 模式 tar 包。`vos-agent-room-v${VERSION}` 只用于触发 CI，不作为公开 release tag。
+- 创建标准 SemVer GitHub release tag `v${VERSION}`，标题使用 `v${VERSION}`，并上传 pull 模式 tar 包。`vos-agent-room-v${VERSION}` 只用于触发 CI，不作为公开 release tag。
 
 如果 release tag 已存在，应先确认是否是重发同一版本；不要覆盖未知来源的资产。确需补传同一版本产物时再手动使用 `gh release upload --clobber`。
 

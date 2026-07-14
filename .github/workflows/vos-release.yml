@@ -73,5 +73,5 @@ jobs:
           gh release create "$PUBLIC_TAG" "ictrek.app/dist/agent-room_${VERSION}_pull.tar" \
             --verify-tag \
             --latest \
-            --title "VOS Agent Room v${VERSION}" \
+            --title "v${VERSION}" \
             --notes-file release-notes.md
