@@ -253,6 +253,7 @@ verify_package() {
   local app_tarball="$2"
   log "Verify app.tar.gz contents"
   tar tzf "$app_tarball" >/dev/null
+  tar tzf "$app_tarball" | grep -qx "manifest.yml"
   tar tf "$package_path" | grep -qx "app.tar.gz"
   ! tar tf "$package_path" | grep -q "^assets/"
   if tar xOf "$package_path" app.tar.gz | tar tzf - | grep -q '__APP_VERSION__'; then
@@ -341,7 +342,9 @@ PACKAGE_PATH="${DIST_DIR}/${PACKAGE_NAME}"
 
 rm -rf "$PACKAGE_ROOT"
 mkdir -p "$PACKAGE_ROOT"
-tar czf "$APP_TARBALL" -C "$STAGE_DIR" .
+TAR_FILES=(.env manifest.yml docker-compose.yml configs.yml routers.yml README.zh-CN.md)
+[[ -f "${STAGE_DIR}/README.en.md" ]] && TAR_FILES+=(README.en.md)
+tar czf "$APP_TARBALL" -C "$STAGE_DIR" "${TAR_FILES[@]}"
 cp "$APP_TARBALL" "${PACKAGE_ROOT}/app.tar.gz"
 tar cf "$PACKAGE_PATH" -C "$PACKAGE_ROOT" app.tar.gz
 verify_package "$PACKAGE_PATH" "$APP_TARBALL"
