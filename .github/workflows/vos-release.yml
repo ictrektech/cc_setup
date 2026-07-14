@@ -38,10 +38,13 @@ jobs:
           test -f "ictrek.app/dist/agent-room_${VERSION}_pull.tar"
 
       - name: Create release notes
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TAG_PREFIX: vos-agent-room-v
         run: |
           set -euo pipefail
           CURRENT="${GITHUB_REF_NAME}"
-          PREVIOUS="$(git tag --sort=-creatordate 'vos-agent-room-v*' | grep -v "^${CURRENT}$" | head -n 1 || true)"
+          PREVIOUS="$(gh release list --limit 100 --json tagName,publishedAt --jq '[.[] | select(.tagName | startswith(env.TAG_PREFIX)) | select(.tagName != env.CURRENT)] | sort_by(.publishedAt) | reverse | .[0].tagName // ""')"
           {
             echo "Pull-mode VOS app package for com.ictrek.agent-room."
             echo
