@@ -291,7 +291,12 @@ require_cmd tar
 mkdir -p "$DIST_DIR"
 acquire_lock
 
-APP_VERSION="$(next_version)"
+if [[ -n "${PACKAGE_VERSION:-}" ]]; then
+  [[ "$PACKAGE_VERSION" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]] || die "invalid PACKAGE_VERSION: $PACKAGE_VERSION"
+  APP_VERSION="$PACKAGE_VERSION"
+else
+  APP_VERSION="$(next_version)"
+fi
 log "Package version: ${APP_VERSION}"
 log "Image source: pull"
 load_feishu_auth

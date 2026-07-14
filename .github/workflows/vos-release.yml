@@ -1,0 +1,61 @@
+name: VOS Pull Package Release
+
+on:
+  push:
+    tags:
+      - "vos-agent-room-v*"
+
+permissions:
+  contents: write
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          fetch-depth: 0
+
+      - name: Write Feishu component credentials
+        run: |
+          cat > "$HOME/.feishu.components.json" <<EOF
+          {
+            "feishu_app_id": "${{ secrets.FEISHU_APP_ID }}",
+            "feishu_app_secret": "${{ secrets.FEISHU_APP_SECRET }}"
+          }
+          EOF
+
+      - name: Build pull-mode package
+        env:
+          FEISHU_SPREADSHEET_TOKEN: ${{ secrets.FEISHU_SPREADSHEET_TOKEN }}
+        run: |
+          set -euo pipefail
+          VERSION="${GITHUB_REF_NAME#vos-agent-room-v}"
+          PACKAGE_VERSION="$VERSION" ./ictrek.app/scripts/package.sh
+          test -f "ictrek.app/dist/agent-room_${VERSION}_pull.tar"
+
+      - name: Create release notes
+        run: |
+          set -euo pipefail
+          CURRENT="${GITHUB_REF_NAME}"
+          PREVIOUS="$(git tag --sort=-creatordate 'vos-agent-room-v*' | grep -v "^${CURRENT}$" | head -n 1 || true)"
+          {
+            echo "Pull-mode VOS app package for com.ictrek.agent-room."
+            echo
+            if [[ -n "$PREVIOUS" ]]; then
+              echo "Changes since ${PREVIOUS}:"
+              git log --no-merges --pretty='- %s (%h)' "${PREVIOUS}..${CURRENT}"
+            else
+              echo "Initial VOS package release."
+              git log --no-merges --pretty='- %s (%h)' -20 "${CURRENT}"
+            fi
+          } > release-notes.md
+
+      - name: Publish GitHub release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          VERSION="${GITHUB_REF_NAME#vos-agent-room-v}"
+          gh release create "$GITHUB_REF_NAME" "ictrek.app/dist/agent-room_${VERSION}_pull.tar" \
+            --title "VOS Agent Room ${VERSION}" \
+            --notes-file release-notes.md
