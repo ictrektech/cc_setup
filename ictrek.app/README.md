@@ -92,4 +92,12 @@ docker compose --profile arm config
 https://<vos-host>:1180/app/com.ictrek.agent-room/
 ```
 
-`routers.yml` 使用完整的 group/page 结构。页面入口必须写 `entry-point: true`，同域嵌入页面必须保留 `keep-alive: true` 和 `embed: true`，并使用 `/app/com.ictrek.agent-room/` 这种 VOS 网关同域路径。`group.id` 使用 `com-ictrek-agent-room`，避免动态路由合并时和其他应用或平台内置分组冲突。
+`routers.yml` 使用完整的 group/page 结构。页面入口必须写 `entry-point: true`，同域嵌入页面必须保留 `keep-alive: true` 和 `embed: true`。Agent Room 的固定入口契约是：
+
+- `app id`: `com.ictrek.agent-room`
+- `group.id`: `com-ictrek-agent-room`
+- `page.id`: `dashboard`
+- `iframe-src`: `/app/com.ictrek.agent-room/?v=20260716`
+- VOS 内部侧边栏路径：`#/app/com.ictrek.agent-room/com-ictrek-agent-room/dashboard`
+
+`scripts/package.sh` 会在生成 `app.tar.gz` 后校验以上字段；不匹配时直接失败。新增或修改入口时必须同步更新模板和脚本校验值。`group.id` 使用 `com-ictrek-agent-room`，避免动态路由合并时和其他应用或平台内置分组冲突。
