@@ -285,6 +285,12 @@ verify_package() {
   if tar xOf "$app_tarball" docker-compose.yml | awk '/^[[:space:]]*image:/ {print $2}' | grep -v '^[^/[:space:]]\+\.[^/[:space:]]\+/' | grep -q .; then
     die "docker-compose.yml contains short image reference"
   fi
+  if ! tar xOf "$app_tarball" routers.yml | grep -q 'entry-point:[[:space:]]*true'; then
+    die "routers.yml must declare entry-point: true"
+  fi
+  if ! tar xOf "$app_tarball" routers.yml | grep -q 'embed:[[:space:]]*true'; then
+    die "routers.yml must declare embed: true for sidebar iframe"
+  fi
 }
 
 

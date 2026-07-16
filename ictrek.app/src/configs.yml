@@ -88,9 +88,9 @@ configs:
       zh-CN: 数据目录
       en: Data Path
     description:
-      zh-CN: 环境变量 AGENT_ROOM_DATA_PATH。宿主机上的会话数据目录；留空时使用 VOS 应用存储 data 目录。
-      en: Environment variable AGENT_ROOM_DATA_PATH. Host directory for session data; leave empty to use the VOS app storage data directory.
-    default: ""
+      zh-CN: 环境变量 AGENT_ROOM_DATA_PATH。宿主机上的会话数据目录，默认 /data/vos_workspace/agentroom/data；需要换磁盘或目录时可覆盖。
+      en: Environment variable AGENT_ROOM_DATA_PATH. Host directory for session data, default /data/vos_workspace/agentroom/data; override it to use another disk or directory.
+    default: /data/vos_workspace/agentroom/data
 
   - name: AGENT_ROOM_CONFIG_PATH
     type: path
@@ -98,9 +98,9 @@ configs:
       zh-CN: 配置目录
       en: Config Path
     description:
-      zh-CN: 环境变量 AGENT_ROOM_CONFIG_PATH。宿主机上的 token、登录密钥等配置目录；留空时使用 VOS 应用存储 config 目录。
-      en: Environment variable AGENT_ROOM_CONFIG_PATH. Host directory for tokens and auth secrets; leave empty to use the VOS app storage config directory.
-    default: ""
+      zh-CN: 环境变量 AGENT_ROOM_CONFIG_PATH。宿主机上的 token、登录密钥等配置目录，默认 /data/vos_workspace/agentroom/config；需要换磁盘或目录时可覆盖。
+      en: Environment variable AGENT_ROOM_CONFIG_PATH. Host directory for tokens and auth secrets, default /data/vos_workspace/agentroom/config; override it to use another disk or directory.
+    default: /data/vos_workspace/agentroom/config
 
   - name: AGENT_ROOM_WORKSPACE_PATH
     type: path
@@ -108,9 +108,9 @@ configs:
       zh-CN: 工作区目录
       en: Workspace Path
     description:
-      zh-CN: 环境变量 AGENT_ROOM_WORKSPACE_PATH。宿主机上给 Agent 访问的工作区目录；留空时使用 VOS 应用存储 workspace 目录。
-      en: Environment variable AGENT_ROOM_WORKSPACE_PATH. Host workspace directory exposed to agents; leave empty to use the VOS app storage workspace directory.
-    default: ""
+      zh-CN: 环境变量 AGENT_ROOM_WORKSPACE_PATH。宿主机上给 Agent 访问的工作区目录，默认 /data/vos_workspace/agentroom/workspace；需要换磁盘或目录时可覆盖。
+      en: Environment variable AGENT_ROOM_WORKSPACE_PATH. Host workspace directory exposed to agents, default /data/vos_workspace/agentroom/workspace; override it to use another disk or directory.
+    default: /data/vos_workspace/agentroom/workspace
 
   # ---------------------------------------------------------------
   # 认证 Token（可选）

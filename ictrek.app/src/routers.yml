@@ -5,7 +5,7 @@
 # =============================================================================
 
 routers:
-  - id: agent-room
+  - id: com-ictrek-agent-room
     kind: group
     title:
       zh-CN: Agent Room
@@ -19,6 +19,8 @@ routers:
           zh-CN: 控制台
           en: Console
         icon: lucide:terminal
-        iframe-src: /app/com.ictrek.agent-room/index.html
+        iframe-src: /app/com.ictrek.agent-room/?v=20260716
         order: 10
         keep-alive: true
+        entry-point: true
+        embed: true

@@ -84,10 +84,12 @@ docker compose --profile amd config
 docker compose --profile arm config
 ```
 
-安装表单可配置 `AGENT_ROOM_DATA_PATH`、`AGENT_ROOM_CONFIG_PATH` 和 `AGENT_ROOM_WORKSPACE_PATH`。留空时分别使用 VOS 应用存储中的 `data`、`config` 和 `workspace` 目录；需要把会话数据、登录配置或 Agent 工作区放到宿主机其他磁盘时，直接在安装 UI 中填写宿主机绝对路径。
+安装表单可配置 `AGENT_ROOM_DATA_PATH`、`AGENT_ROOM_CONFIG_PATH` 和 `AGENT_ROOM_WORKSPACE_PATH`。默认分别使用宿主机 `/data/vos_workspace/agentroom/data`、`/data/vos_workspace/agentroom/config` 和 `/data/vos_workspace/agentroom/workspace`；需要把会话数据、登录配置或 Agent 工作区放到其他磁盘时，直接在安装 UI 中填写宿主机绝对路径。
 
 安装后入口为：
 
 ```text
 https://<vos-host>:1180/app/com.ictrek.agent-room/
 ```
+
+`routers.yml` 使用完整的 group/page 结构。页面入口必须写 `entry-point: true`，同域嵌入页面必须保留 `keep-alive: true` 和 `embed: true`，并使用 `/app/com.ictrek.agent-room/` 这种 VOS 网关同域路径。`group.id` 使用 `com-ictrek-agent-room`，避免动态路由合并时和其他应用或平台内置分组冲突。

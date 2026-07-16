@@ -18,15 +18,18 @@ x-agent-room-base: &agent-room-base
     - DISABLE_TELEMETRY=1
     - CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC=1
   volumes:
-    - ${AGENT_ROOM_DATA_PATH:-${VOS_APP_STORAGE_PATH}/data}:/app/storage/data
-    - ${AGENT_ROOM_CONFIG_PATH:-${VOS_APP_STORAGE_PATH}/config}:/app/storage/config
-    - ${AGENT_ROOM_WORKSPACE_PATH:-${VOS_APP_STORAGE_PATH}/workspace}:/workspace
+    - ${AGENT_ROOM_DATA_PATH:-/data/vos_workspace/agentroom/data}:/app/storage/data
+    - ${AGENT_ROOM_CONFIG_PATH:-/data/vos_workspace/agentroom/config}:/app/storage/config
+    - ${AGENT_ROOM_WORKSPACE_PATH:-/data/vos_workspace/agentroom/workspace}:/workspace
   labels:
     - "traefik.enable=true"
     - "traefik.docker.network=vos_default"
     - "traefik.http.routers.agent-room-web.rule=PathPrefix(`/app/com.ictrek.agent-room`)"
     - "traefik.http.routers.agent-room-web.service=agent-room-web"
-    - "traefik.http.routers.agent-room-web.middlewares=agent-room-web-strip"
+    - "traefik.http.routers.agent-room-web.middlewares=agent-room-web-slash,agent-room-web-strip"
+    - "traefik.http.middlewares.agent-room-web-slash.redirectregex.regex=^(.*)/app/com\\.ictrek\\.agent-room$"
+    - "traefik.http.middlewares.agent-room-web-slash.redirectregex.replacement=$${1}/app/com.ictrek.agent-room/"
+    - "traefik.http.middlewares.agent-room-web-slash.redirectregex.permanent=true"
     - "traefik.http.middlewares.agent-room-web-strip.stripprefix.prefixes=/app/com.ictrek.agent-room"
     - "traefik.http.services.agent-room-web.loadbalancer.server.port=6004"
 
