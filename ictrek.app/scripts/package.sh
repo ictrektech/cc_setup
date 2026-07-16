@@ -235,16 +235,55 @@ dst.write_text(text, encoding="utf-8")
 PYRENDER
 }
 
+render_compose_file() {
+  local src="$1"
+  local dst="$2"
+  local env_file="$3"
+  python3 - "$src" "$dst" "$APP_VERSION" "$env_file" <<'PYRENDER'
+import re
+import sys
+from pathlib import Path
+
+src, dst = Path(sys.argv[1]), Path(sys.argv[2])
+version, env_path = sys.argv[3], Path(sys.argv[4])
+env = {}
+for line in env_path.read_text(encoding="utf-8").splitlines():
+    if not line or line.startswith("#") or "=" not in line:
+        continue
+    key, value = line.split("=", 1)
+    env[key] = value
+
+text = src.read_text(encoding="utf-8").replace("__APP_VERSION__", version)
+
+def replace_image_var(match):
+    key = match.group(1)
+    if key.endswith("_IMAGE") and key in env:
+        return env[key]
+    return match.group(0)
+
+text = re.sub(r"\$\{([A-Z0-9_]+)(?::-[^}]*)?\}", replace_image_var, text)
+dst.write_text(text, encoding="utf-8")
+PYRENDER
+}
+
 verify_package() {
   local package_path="$1"
   local app_tarball="$2"
+  local package_text
   log "Verify app.tar.gz contents"
   tar tzf "$app_tarball" >/dev/null
   tar tzf "$app_tarball" | grep -qx "manifest.yml"
   tar tf "$package_path" | grep -qx "app.tar.gz"
   ! tar tf "$package_path" | grep -q "^assets/"
-  if tar xOf "$package_path" app.tar.gz | tar tzf - | grep -q '__APP_VERSION__'; then
-    die "unrendered __APP_VERSION__ placeholder remains"
+  package_text="$(tar tzf "$app_tarball" | while IFS= read -r file; do [[ "$file" == */ ]] && continue; tar xOf "$app_tarball" "$file"; printf '\n'; done)"
+  if printf '%s' "$package_text" | grep -q '__[A-Z0-9_]\+__'; then
+    die "unrendered placeholder remains"
+  fi
+  if tar xOf "$app_tarball" docker-compose.yml | grep -q '\${[^}]*_IMAGE[^}]*}'; then
+    die "unrendered image variable remains in docker-compose.yml"
+  fi
+  if tar xOf "$app_tarball" docker-compose.yml | awk '/^[[:space:]]*image:/ {print $2}' | grep -v '^[^/[:space:]]\+\.[^/[:space:]]\+/' | grep -q .; then
+    die "docker-compose.yml contains short image reference"
   fi
 }
 
@@ -316,11 +355,12 @@ for profile_spec in "${PROFILES[@]}"; do
   done
 done
 
-for file in manifest.yml docker-compose.yml configs.yml routers.yml README.zh-CN.md README.en.md; do
+for file in manifest.yml configs.yml routers.yml README.zh-CN.md README.en.md; do
   if [[ -f "${SRC_DIR}/${file}" ]]; then
     render_text_file "${SRC_DIR}/${file}" "${STAGE_DIR}/${file}"
   fi
 done
+render_compose_file "${SRC_DIR}/docker-compose.yml" "${STAGE_DIR}/docker-compose.yml" "$ENV_FILE"
 
 
 APP_TARBALL="${DIST_DIR}/app.tar.gz"
