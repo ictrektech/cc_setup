@@ -25,8 +25,18 @@ Claude / Codex AI Agent 远程管理控制台。
 
 ```bash
 # 在宿主机查看自动生成的 Token
-cat ${VOS_APP_STORAGE_PATH}/config/token
+cat ${AGENT_ROOM_CONFIG_PATH:-${VOS_APP_STORAGE_PATH}/config}/token
 ```
+
+## 外映路径
+
+以下宿主机路径都可在 VOS 安装 UI 中配置；留空时使用默认应用存储目录。
+
+| 变量 | 宿主机路径用途 |
+|:---|:---|
+| `AGENT_ROOM_DATA_PATH` | 会话数据，容器内为 `/app/storage/data` |
+| `AGENT_ROOM_CONFIG_PATH` | Token 和登录密钥，容器内为 `/app/storage/config` |
+| `AGENT_ROOM_WORKSPACE_PATH` | Agent 工作区，容器内为 `/workspace` |
 
 ## 环境变量
 
@@ -37,3 +47,6 @@ cat ${VOS_APP_STORAGE_PATH}/config/token
 | `ANTHROPIC_MODEL` | 默认模型 |
 | `AGENT_ROOM_TOKEN` | Web 登录 Token |
 | `AGENT_ROOM_PORT` | 服务端口 |
+| `AGENT_ROOM_DATA_PATH` | 会话数据宿主机目录 |
+| `AGENT_ROOM_CONFIG_PATH` | 配置宿主机目录 |
+| `AGENT_ROOM_WORKSPACE_PATH` | 工作区宿主机目录 |

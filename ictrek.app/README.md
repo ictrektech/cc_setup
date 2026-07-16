@@ -16,7 +16,21 @@ cd apps/cc_setup/ictrek.app
 dist/agent-room_${VERSION}_pull.tar
 ```
 
-安装包内只有一个 `docker-compose.yml`，当前包含 `amd` Docker Compose profile。打包脚本会优先读取 `~/.feishu.components.json`，若文件不存在或读取失败则回退到 `~/.feishu.json`，从对应 sheet 读取 `agent-room` 镜像最新版本，并写入包内 `.env`。
+安装包内只有一个 `docker-compose.yml`，其中包含 `arm` 和 `amd` 两个 Docker Compose profile。打包脚本会优先读取 `~/.feishu.components.json`，若文件不存在或读取失败则回退到 `~/.feishu.json`，从对应 sheet 读取 `agent-room` 镜像最新版本，并写入包内 `.env`。
+
+`agent-room` 镜像由仓库根目录执行 `./docker/build_images.sh <profile>` 构建、推送并写入飞书发布表：
+
+```bash
+./docker/build_images.sh amd
+./docker/build_images.sh arm
+```
+
+默认写表范围：
+
+- `amd` 写入 `AMD_with_cuda`、`AMD_with_mxn100`
+- `arm` 写入 `l4t`、`ARM_without_cuda`、`ARM_with_cuda`、`SOPHON_bm1688`
+
+写表时只查找精确表头 `agent-room`。若该列不存在，脚本只在最后一个非空表头/仓库列后新增一列，并写入表头和镜像仓库地址，避免重复扩出空列。
 
 
 ## 版本更新与 Release
@@ -44,6 +58,7 @@ dist/agent-room_${VERSION}_pull.tar
 
 | profile | 飞书 sheet | 适用平台 |
 | --- | --- | --- |
+| `arm` | `ARM_with_cuda` | ARM / L4T 类设备 |
 | `amd` | `AMD_with_cuda` | x86_64 / AMD64 类设备 |
 
 示例：
@@ -61,9 +76,10 @@ vos-platform-cli app install-local \
 
 ```bash
 docker compose --profile amd config
+docker compose --profile arm config
 ```
 
-当前飞书发布表只有 `AMD_with_cuda` sheet 包含 `agent-room` / `agent_room` 组件列，`l4t` 和 `ARM_without_cuda` 没有对应列。因此本次只保留 `amd` profile；arm 镜像发布后再补 `arm` profile。
+安装表单可配置 `AGENT_ROOM_DATA_PATH`、`AGENT_ROOM_CONFIG_PATH` 和 `AGENT_ROOM_WORKSPACE_PATH`。留空时分别使用 VOS 应用存储中的 `data`、`config` 和 `workspace` 目录；需要把会话数据、登录配置或 Agent 工作区放到宿主机其他磁盘时，直接在安装 UI 中填写宿主机绝对路径。
 
 安装后入口为：
 

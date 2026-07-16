@@ -16,6 +16,7 @@ VERSION_FILE="${ROOT_DIR}/VERSION"
 LOCK_DIR="${DIST_DIR}/.package.lock"
 
 PROFILES=(
+  "arm|ARM_with_cuda"
   "amd|AMD_with_cuda"
 )
 COMPONENTS=(

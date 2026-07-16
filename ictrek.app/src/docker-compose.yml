@@ -13,11 +13,14 @@ x-agent-room-base: &agent-room-base
     - ANTHROPIC_AUTH_TOKEN=${ANTHROPIC_AUTH_TOKEN:-}
     - ANTHROPIC_BASE_URL=${ANTHROPIC_BASE_URL:-https://api.anthropic.com}
     - ANTHROPIC_MODEL=${ANTHROPIC_MODEL:-claude-sonnet-5-20250610}
+    - ANTHROPIC_HAIKU_MODEL=${ANTHROPIC_HAIKU_MODEL:-claude-haiku-4-5-20251001}
+    - AGENTROOM_WORKSPACE_DIR=/workspace
     - DISABLE_TELEMETRY=1
     - CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC=1
   volumes:
-    - ${VOS_APP_STORAGE_PATH}/data:/app/storage/data
-    - ${VOS_APP_STORAGE_PATH}/config:/app/storage/config
+    - ${AGENT_ROOM_DATA_PATH:-${VOS_APP_STORAGE_PATH}/data}:/app/storage/data
+    - ${AGENT_ROOM_CONFIG_PATH:-${VOS_APP_STORAGE_PATH}/config}:/app/storage/config
+    - ${AGENT_ROOM_WORKSPACE_PATH:-${VOS_APP_STORAGE_PATH}/workspace}:/workspace
   labels:
     - "traefik.enable=true"
     - "traefik.docker.network=vos_default"
@@ -28,6 +31,12 @@ x-agent-room-base: &agent-room-base
     - "traefik.http.services.agent-room-web.loadbalancer.server.port=6004"
 
 services:
+  agent-room-arm:
+    <<: *agent-room-base
+    profiles: ["arm"]
+    image: ${AGENT_ROOM_ARM_IMAGE}
+    pull_policy: always
+
   agent-room-amd:
     <<: *agent-room-base
     profiles: ["amd"]

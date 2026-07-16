@@ -4,6 +4,20 @@ Claude / Codex / RTK / skills / digital-workers 的一键安装脚本集合。
 
 `ictrek.app/` 是后续 VOS 应用定义、打包脚本和安装说明的入口目录；当前先保留说明和生成产物忽略规则。
 
+## Agent Room VOS 镜像
+
+VOS app 使用 `agent-room` 镜像。构建脚本会推送镜像并把 tag 写入飞书发布表：
+
+```bash
+./docker/build_images.sh amd
+./docker/build_images.sh arm
+```
+
+- `amd` 默认写入 `AMD_with_cuda`、`AMD_with_mxn100`
+- `arm` 默认写入 `l4t`、`ARM_without_cuda`、`ARM_with_cuda`、`SOPHON_bm1688`
+
+脚本只查找精确表头 `agent-room`。表头不存在时只新增一列并写入表头/仓库地址，不会反复扩出空列。
+
 ## Claude / Codex 环境安装
 
 这里提供两种互斥方案。推荐新机器优先使用 cc-switch 方案；如果已经在使用 cc-haha，可以继续使用 cc-haha 方案，或者运行 cc-switch 方案自动卸载 cc-haha 后切换。
