@@ -25,7 +25,7 @@ FEISHU_SPREADSHEET_TOKEN="${FEISHU_SPREADSHEET_TOKEN:-Htotsn3oahO1zxt73YMcaB1zn8
 SWR_REGISTRY="${SWR_REGISTRY:-swr.cn-southwest-2.myhuaweicloud.com/ictrek}"
 
 AMD_SHEETS=("AMD_with_cuda" "AMD_with_mxn100")
-ARM_SHEETS=("l4t" "ARM_without_cuda" "ARM_with_cuda" "SOPHON_bm1688")
+ARM_SHEETS=("l4t" "ARM_without_cuda" "ARM_with_cuda" "thor_spark" "SOPHON_bm1688")
 
 declare -A PROFILE_TO_PLATFORM=(
   ["amd"]="linux/amd64"
@@ -337,7 +337,7 @@ Usage:
 
 Default sheets:
   amd -> AMD_with_cuda, AMD_with_mxn100
-  arm -> l4t, ARM_without_cuda, ARM_with_cuda, SOPHON_bm1688
+  arm -> l4t, ARM_without_cuda, ARM_with_cuda, thor_spark, SOPHON_bm1688
 EOF
 }
 

@@ -28,7 +28,7 @@ dist/agent-room_${VERSION}_pull.tar
 默认写表范围：
 
 - `amd` 写入 `AMD_with_cuda`、`AMD_with_mxn100`
-- `arm` 写入 `l4t`、`ARM_without_cuda`、`ARM_with_cuda`、`SOPHON_bm1688`
+- `arm` 写入 `l4t`、`ARM_without_cuda`、`ARM_with_cuda`、`thor_spark`、`SOPHON_bm1688`
 
 写表时只查找精确表头 `agent-room`。若该列不存在，脚本只在最后一个非空表头/仓库列后新增一列，并写入表头和镜像仓库地址，避免重复扩出空列。
 
