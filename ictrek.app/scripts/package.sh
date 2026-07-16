@@ -49,23 +49,9 @@ acquire_lock() {
   trap 'rm -rf "$LOCK_DIR"' EXIT
 }
 
-next_version() {
-  local current major minor patch
-  current="$(tr -d '[:space:]' < "$VERSION_FILE")"
-  [[ "$current" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]] || die "invalid VERSION: $current"
-  IFS=. read -r major minor patch <<< "$current"
-  if (( patch < 999 )); then
-    patch=$((patch + 1))
-  else
-    patch=0
-    if (( minor < 999 )); then
-      minor=$((minor + 1))
-    else
-      minor=0
-      major=$((major + 1))
-    fi
-  fi
-  echo "${major}.${minor}.${patch}"
+read_version() {
+  [[ -f "$VERSION_FILE" ]] || echo "0.0.0" > "$VERSION_FILE"
+  tr -d '[:space:]' < "$VERSION_FILE"
 }
 
 read_feishu_field() {
@@ -289,7 +275,6 @@ done
 require_cmd curl
 require_cmd python3
 require_cmd tar
-[[ -f "$VERSION_FILE" ]] || echo "0.0.0" > "$VERSION_FILE"
 mkdir -p "$DIST_DIR"
 acquire_lock
 
@@ -297,8 +282,9 @@ if [[ -n "${PACKAGE_VERSION:-}" ]]; then
   [[ "$PACKAGE_VERSION" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]] || die "invalid PACKAGE_VERSION: $PACKAGE_VERSION"
   APP_VERSION="$PACKAGE_VERSION"
 else
-  APP_VERSION="$(next_version)"
+  APP_VERSION="$(read_version)"
 fi
+[[ "$APP_VERSION" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]] || die "invalid VERSION: $APP_VERSION"
 log "Package version: ${APP_VERSION}"
 log "Image source: pull"
 load_feishu_auth
@@ -350,5 +336,4 @@ cp "$APP_TARBALL" "${PACKAGE_ROOT}/app.tar.gz"
 tar cf "$PACKAGE_PATH" -C "$PACKAGE_ROOT" app.tar.gz
 verify_package "$PACKAGE_PATH" "$APP_TARBALL"
 
-echo "$APP_VERSION" > "$VERSION_FILE"
 log "Done: ${PACKAGE_PATH}"
