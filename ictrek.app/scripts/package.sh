@@ -6,6 +6,7 @@ APP_ID="com.ictrek.agent-room"
 ROUTER_GROUP_ID="com-ictrek-agent-room"
 ROUTER_PAGE_ID="dashboard"
 ROUTER_IFRAME_SRC="/app/com.ictrek.agent-room/?v=20260716"
+ROUTER_HASH_PATH="#/app/com.ictrek.agent-room/com-ictrek-agent-room/dashboard"
 SPREADSHEET_TOKEN="${FEISHU_SPREADSHEET_TOKEN:-Htotsn3oahO1zxt73YMcaB1zn8e}"
 FEISHU_CONFIG_FILE="${FEISHU_CONFIG_FILE:-${HOME}/.feishu.components.json}"
 FEISHU_FALLBACK_CONFIG_FILE="${FEISHU_FALLBACK_CONFIG_FILE:-${HOME}/.feishu.json}"
@@ -274,6 +275,7 @@ verify_package() {
   local app_tarball="$2"
   local package_text
   local routers_text
+  local compose_text
   local sidebar_route
   log "Verify app.tar.gz contents"
   tar tzf "$app_tarball" >/dev/null
@@ -284,27 +286,34 @@ verify_package() {
   if printf '%s' "$package_text" | grep -q '__[A-Z0-9_]\+__'; then
     die "unrendered placeholder remains"
   fi
-  if tar xOf "$app_tarball" docker-compose.yml | grep -q '\${[^}]*_IMAGE[^}]*}'; then
+  compose_text="$(tar xOf "$app_tarball" docker-compose.yml)"
+  if printf '%s\n' "$compose_text" | grep -q '\${[^}]*_IMAGE[^}]*}'; then
     die "unrendered image variable remains in docker-compose.yml"
   fi
-  if tar xOf "$app_tarball" docker-compose.yml | awk '/^[[:space:]]*image:/ {print $2}' | grep -v '^[^/[:space:]]\+\.[^/[:space:]]\+/' | grep -q .; then
+  if printf '%s\n' "$compose_text" | awk '/^[[:space:]]*image:/ {print $2}' | grep -v '^[^/[:space:]]\+\.[^/[:space:]]\+/' | grep -q .; then
     die "docker-compose.yml contains short image reference"
+  fi
+  if ! printf '%s\n' "$compose_text" | grep -Fq 'HeadersRegexp(`Sec-Fetch-Dest`, `document`)'; then
+    die "docker-compose.yml must redirect top-level document opens to VOS hash route"
+  fi
+  if ! printf '%s\n' "$compose_text" | grep -Fq "${ROUTER_HASH_PATH}"; then
+    die "docker-compose.yml redirect must target ${ROUTER_HASH_PATH}"
   fi
   routers_text="$(tar xOf "$app_tarball" routers.yml)"
   if ! printf '%s\n' "$routers_text" | grep -Fq "  - id: ${ROUTER_GROUP_ID}"; then
     die "routers.yml must declare top-level group id ${ROUTER_GROUP_ID}"
   fi
   if ! printf '%s\n' "$routers_text" | grep -Fq "      - id: ${ROUTER_PAGE_ID}"; then
-    die "routers.yml must declare entry page id ${ROUTER_PAGE_ID}"
+    die "routers.yml must declare sidebar page id ${ROUTER_PAGE_ID}"
   fi
   if ! printf '%s\n' "$routers_text" | grep -Fq "        iframe-src: ${ROUTER_IFRAME_SRC}"; then
-    die "routers.yml iframe-src must be ${ROUTER_IFRAME_SRC}"
+    die "routers.yml sidebar iframe-src must be ${ROUTER_IFRAME_SRC}"
   fi
   if printf '%s\n' "$routers_text" | grep -Eq 'iframe-src:[[:space:]]*https?://'; then
     die "routers.yml iframe-src must use a VOS same-origin /app/<app-id>/ path"
   fi
   if ! printf '%s\n' "$routers_text" | grep -q 'entry-point:[[:space:]]*true'; then
-    die "routers.yml must declare entry-point: true"
+    die "routers.yml sidebar page must declare entry-point: true"
   fi
   if ! printf '%s\n' "$routers_text" | grep -q 'embed:[[:space:]]*true'; then
     die "routers.yml must declare embed: true for sidebar iframe"

@@ -24,6 +24,13 @@ x-agent-room-base: &agent-room-base
   labels:
     - "traefik.enable=true"
     - "traefik.docker.network=vos_default"
+    - "traefik.http.routers.agent-room-top-open.rule=PathPrefix(`/app/com.ictrek.agent-room`) && HeadersRegexp(`Sec-Fetch-Dest`, `document`)"
+    - "traefik.http.routers.agent-room-top-open.priority=1000"
+    - "traefik.http.routers.agent-room-top-open.service=agent-room-web"
+    - "traefik.http.routers.agent-room-top-open.middlewares=agent-room-top-open-redirect"
+    - "traefik.http.middlewares.agent-room-top-open-redirect.redirectregex.regex=^(https?://[^/]+)/app/com\\.ictrek\\.agent-room/?(?:\\?.*)?$"
+    - "traefik.http.middlewares.agent-room-top-open-redirect.redirectregex.replacement=$${1}/#/app/com.ictrek.agent-room/com-ictrek-agent-room/dashboard"
+    - "traefik.http.middlewares.agent-room-top-open-redirect.redirectregex.permanent=false"
     - "traefik.http.routers.agent-room-web.rule=PathPrefix(`/app/com.ictrek.agent-room`)"
     - "traefik.http.routers.agent-room-web.service=agent-room-web"
     - "traefik.http.routers.agent-room-web.middlewares=agent-room-web-slash,agent-room-web-strip"
