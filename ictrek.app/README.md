@@ -5,6 +5,10 @@
 
 ## 打包
 
+正式发布不要在本地读取飞书并打包。发布入口是 `scripts/update_version.sh`：它只更新 `VERSION`、提交 release commit、推送 `vos-agent-room-v${VERSION}` 触发 tag；GitHub Actions 收到 tag 后才会读取飞书组件版本、生成 pull 包并更新 GitHub release。
+
+本地 `package.sh` 只用于调试模板或手动验证。它不会递增或写回 `VERSION`；未设置 `PACKAGE_VERSION` 时读取当前 `ictrek.app/VERSION`，CI 会显式传入 tag 中解析出的 `PACKAGE_VERSION`。
+
 ```bash
 cd apps/cc_setup/ictrek.app
 ./scripts/package.sh
@@ -47,6 +51,7 @@ dist/agent-room_${VERSION}_pull.tar
 
 - 使用 tag 中的版本号作为 `PACKAGE_VERSION` 调用 `package.sh`，生成 `dist/agent-room_${VERSION}_pull.tar`。
 - 读取 `~/.feishu.components.json` 所需的 GitHub Secrets：`FEISHU_APP_ID`、`FEISHU_APP_SECRET`，可选 `FEISHU_SPREADSHEET_TOKEN`。
+- 在 CI 中通过飞书发布表读取 `agent-room` 最新镜像 tag；当前不读取其他 VOS app release，因此不需要 `VOS_DEPENDENCY_RELEASE_TOKEN`。
 - 查找上一个 VOS release tag，把两个 tag 之间的提交记录写入 release notes。
 - 创建标准 SemVer GitHub release tag `v${VERSION}`，标题使用 `v${VERSION}`，并上传 pull 模式 tar 包。`vos-agent-room-v${VERSION}` 只用于触发 CI，不作为公开 release tag。
 
